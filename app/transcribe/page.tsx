@@ -1,21 +1,105 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react"; // Add missing hooks
+import { useEffect, useState, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Play, Pause, Download } from "lucide-react";
+import { Play, Pause, Download, Loader2 } from "lucide-react";
 import DropzoneComponent from "@/app/components/Dropzone";
 import { useFileStore } from "@/app/store";
 import { convertVideoToAudio } from "@/app/ffmpeg";
+
+
+const AudioPlayer = ({ audioBlob }: { audioBlob: Blob }) => {
+  const [isPlaying, setIsPlaying] = useState(false);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  const togglePlayback = () => {
+    if (!audioRef.current) return;
+    
+    if (isPlaying) {
+      audioRef.current.pause();
+    } else {
+      audioRef.current.play();
+    }
+    setIsPlaying(!isPlaying);
+  };
+
+  return (
+    <div className="group relative">
+      <div className="absolute inset-0 bg-gradient-to-r from-cyan-400/20 to-blue-500/20 rounded-xl filter blur-2xl group-hover:blur-3xl transition-all duration-300" />
+      
+      <div className="relative flex items-center justify-between p-4 bg-dark rounded-xl shadow-lg border border-gray-100">
+        <button
+          onClick={togglePlayback}
+          className="p-3 rounded-full bg-cyan-500 hover:bg-cyan-600 transition-colors shadow-md"
+        >
+          {isPlaying ? (
+            <Pause className="w-5 h-5 text-white" />
+          ) : (
+            <Play className="w-5 h-5 text-white" />
+          )}
+        </button>
+
+        <div className="mx-4">
+          <WaveformVisualizer isPlaying={isPlaying} />
+        </div>
+
+        <a
+          href={URL.createObjectURL(audioBlob)}
+          download="converted-audio.mp3"
+          className="p-2 rounded-lg hover:bg-gray-100 transition-colors"
+        >
+          <Download className="w-6 h-6 text-cyan-600" />
+        </a>
+
+        <audio
+          ref={audioRef}
+          onEnded={() => setIsPlaying(false)}
+          className="hidden"
+        >
+          <source src={URL.createObjectURL(audioBlob)} type="audio/mpeg" />
+        </audio>
+      </div>
+    </div>
+  );
+};
+
+const WaveformVisualizer = ({ isPlaying }: { isPlaying: boolean }) => {
+  return (
+    <div className="flex items-end h-12 gap-1">
+      {[...Array(20)].map((_, i) => (
+        <motion.div
+          key={i}
+          className="w-2 bg-cyan-400 rounded-full"
+          animate={{
+            height: isPlaying ? `${Math.random() * 24 + 8}px` : "8px",
+          }}
+          transition={{
+            duration: 0.4,
+            repeat: Infinity,
+            repeatType: "mirror",
+            ease: "easeInOut",
+          }}
+          style={{ originY: "bottom" }}
+        />
+      ))}
+    </div>
+  );
+};
+
 
 export default function TranscribePage() {
   const {
     file,
     audioBlob,
+    transcript,
     isConverting,
+    isTranscribing,
     conversionProgress,
     error,
     setAudioBlob,
+    setTranscript,
     setIsConverting,
+    setIsTranscribing,
     setError
   } = useFileStore();
 
@@ -35,9 +119,40 @@ export default function TranscribePage() {
         }
       }
     };
-
     handleConversion();
   }, [file, audioBlob, isConverting]);
+
+  const handleTranscription = async () => {
+    if (!audioBlob) return;
+
+    try {
+      setIsTranscribing(true);
+      setError(null);
+      
+      const audioFile = new File([audioBlob], "audio.mp3", { type: "audio/mpeg" });
+      const formData = new FormData();
+      formData.append("file", audioFile);
+
+      const response = await fetch("/api/transcribe", {
+        method: "POST",
+        body: formData,
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Transcription failed');
+      }
+
+      const { text } = await response.json();
+      setTranscript(text);
+    } catch (err) {
+      const error = err as Error;
+      console.error('Transcription error:', error);
+      setError(error.message || 'Transcription failed. Please try again.');
+    } finally {
+      setIsTranscribing(false);
+    }
+  };
 
   return (
     <div className="flex flex-col items-center gap-6 mt-10">
@@ -104,6 +219,35 @@ export default function TranscribePage() {
                   animate={{ opacity: 1, y: 0 }}
                 >
                   <AudioPlayer audioBlob={audioBlob} />
+                  
+                  {!transcript && (
+                    <motion.button
+                      onClick={handleTranscription}
+                      disabled={isTranscribing}
+                      className="mt-4 w-full py-3 px-6 bg-cyan-600 hover:bg-cyan-700 text-white rounded-lg font-medium transition-colors disabled:opacity-50"
+                    >
+                      {isTranscribing ? (
+                        <Loader2 className="h-5 w-5 animate-spin mx-auto" />
+                      ) : (
+                        "Transcribe Audio"
+                      )}
+                    </motion.button>
+                  )}
+                </motion.div>
+              )}
+
+              {transcript && (
+                <motion.div
+                  className="w-full mt-4"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                >
+                  <div className="p-4 bg-dark-50 rounded-lg">
+                    <h3 className="text-2xl font-semibold mb-2">Transcription</h3>
+                    <p className="text-light-600 text-sm whitespace-pre-wrap">
+                      {transcript}
+                    </p>
+                  </div>
                 </motion.div>
               )}
             </div>
@@ -114,80 +258,3 @@ export default function TranscribePage() {
   );
 }
 
-const AudioPlayer = ({ audioBlob }: { audioBlob: Blob }) => {
-  const [isPlaying, setIsPlaying] = useState(false);
-  const audioRef = useRef<HTMLAudioElement | null>(null);
-
-  const togglePlayback = () => {
-    if (!audioRef.current) return;
-    
-    if (isPlaying) {
-      audioRef.current.pause();
-    } else {
-      audioRef.current.play();
-    }
-    setIsPlaying(!isPlaying);
-  };
-
-  return (
-    <div className="group relative">
-      <div className="absolute inset-0 bg-gradient-to-r from-cyan-400/20 to-blue-500/20 rounded-xl filter blur-2xl group-hover:blur-3xl transition-all duration-300" />
-      
-      <div className="relative flex items-center justify-between p-4 bg-dark rounded-xl shadow-lg border border-gray-100">
-        <button
-          onClick={togglePlayback}
-          className="p-3 rounded-full bg-cyan-500 hover:bg-cyan-600 transition-colors shadow-md"
-        >
-          {isPlaying ? (
-            <Pause className="w-5 h-5 text-white" />
-          ) : (
-            <Play className="w-5 h-5 text-white" />
-          )}
-        </button>
-
-        <div className=" mx-4">
-          <WaveformVisualizer isPlaying={isPlaying} />
-        </div>
-
-        <a
-          href={URL.createObjectURL(audioBlob)}
-          download="converted-audio.mp3"
-          className="p-2 rounded-lg hover:bg-gray-100 transition-colors"
-        >
-          <Download className="w-6 h-6 text-cyan-600" />
-        </a>
-
-        <audio
-          ref={audioRef}
-          onEnded={() => setIsPlaying(false)}
-          className="hidden"
-        >
-          <source src={URL.createObjectURL(audioBlob)} type="audio/mpeg" />
-        </audio>
-      </div>
-    </div>
-  );
-};
-
-const WaveformVisualizer = ({ isPlaying }: { isPlaying: boolean }) => {
-  return (
-    <div className="flex items-end h-12 gap-1">
-      {[...Array(20)].map((_, i) => (
-        <motion.div
-          key={i}
-          className="w-2 bg-cyan-400 rounded-full"
-          animate={{
-            height: isPlaying ? `${Math.random() * 24 + 8}px` : "8px",
-          }}
-          transition={{
-            duration: 0.4,
-            repeat: Infinity,
-            repeatType: "mirror",
-            ease: "easeInOut",
-          }}
-          style={{ originY: "bottom" }}
-        />
-      ))}
-    </div>
-  );
-};
