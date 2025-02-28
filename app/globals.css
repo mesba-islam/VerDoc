@@ -57,6 +57,8 @@
   /* Apply Tailwind's utility classes directly */
   * {
     border-color: hsl(var(--border));
+    box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
   }
 
   body {
