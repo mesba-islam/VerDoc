@@ -6,6 +6,8 @@ import { Play, Pause, Download, Loader2 } from "lucide-react";
 import DropzoneComponent from "@/app/components/Dropzone";
 import { useFileStore } from "@/app/store";
 import { convertVideoToAudio } from "@/app/ffmpeg";
+import SummaryGenerator from '@/app/components/SummaryGenerator';
+import { ErrorBoundary } from 'react-error-boundary';
 
 
 const AudioPlayer = ({ audioBlob }: { audioBlob: Blob }) => {
@@ -296,6 +298,17 @@ export default function TranscribePage() {
                       </div>
                     ))}
                   </div>
+
+              <ErrorBoundary 
+                FallbackComponent={({ error }) => (
+                  <div className="error-message">
+                    Summary Generation Error: {error.message}
+                  </div>
+                )}
+              >
+                <SummaryGenerator transcript={transcript} />
+              </ErrorBoundary>
+
                 </div>
               </motion.div>
             )}
