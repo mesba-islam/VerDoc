@@ -33,7 +33,8 @@ export const useFileStore = create<FileStore>((set) => ({
   setTranscript: (transcript) => set({ transcript }),
   setIsConverting: (isConverting) => set({ isConverting }),
   setIsTranscribing: (isTranscribing) => set({ isTranscribing }),
-  setConversionProgress: (conversionProgress) => set({ conversionProgress }),
+  // setConversionProgress: (conversionProgress) => set({ conversionProgress }),
+  setConversionProgress: (progress) => set({ conversionProgress: progress }),
   setError: (error) => set({ error }),
   setSegments: (segments) => set({ segments }), // Added setSegments action
 }));

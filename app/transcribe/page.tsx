@@ -96,11 +96,13 @@ export default function TranscribePage() {
     isTranscribing,
     conversionProgress,
     error,
+    segments,
     setAudioBlob,
     setTranscript,
     setIsConverting,
     setIsTranscribing,
-    setError
+    setError,
+    setSegments,
   } = useFileStore();
 
   useEffect(() => {
@@ -121,6 +123,39 @@ export default function TranscribePage() {
     };
     handleConversion();
   }, [file, audioBlob, isConverting]);
+
+
+   // Type for grouped segments
+   type GroupedSegment = {
+    text: string;
+    pauseDuration: number;
+  };
+
+  const groupSegmentsWithPauses = (): GroupedSegment[] => {
+    if (!segments) return [];
+    
+    const grouped: GroupedSegment[] = [];
+    let currentGroup: string[] = [];
+    let lastEnd = 0;
+
+    segments.forEach((segment, index) => {
+      if (segment.start - lastEnd > 1 && index !== 0) {
+        grouped.push({
+          text: currentGroup.join(' '),
+          pauseDuration: segment.start - lastEnd
+        });
+        currentGroup = [];
+      }
+      currentGroup.push(segment.text);
+      lastEnd = segment.end;
+    });
+
+    if (currentGroup.length > 0) {
+      grouped.push({ text: currentGroup.join(' '), pauseDuration: 0 });
+    }
+
+    return grouped;
+  };
 
   const handleTranscription = async () => {
     if (!audioBlob) return;
@@ -143,7 +178,8 @@ export default function TranscribePage() {
         throw new Error(errorData.error || 'Transcription failed');
       }
 
-      const { text } = await response.json();
+      const { segments, text } = await response.json();
+      setSegments(segments); // Now properly used
       setTranscript(text);
     } catch (err) {
       const error = err as Error;
@@ -236,20 +272,33 @@ export default function TranscribePage() {
                 </motion.div>
               )}
 
-              {transcript && (
-                <motion.div
-                  className="w-full mt-4"
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                >
-                  <div className="p-4 bg-dark-50 rounded-lg">
-                    <h3 className="text-2xl font-semibold mb-2">Transcription</h3>
-                    <p className="text-light-600 text-sm whitespace-pre-wrap">
-                      {transcript}
-                    </p>
+            {transcript && (
+              <motion.div
+                className="w-full mt-4"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+              >
+                <div className="p-4 bg-dark-50 rounded-lg">
+                  <h3 className="text-2xl font-semibold mb-4">Transcription</h3>
+                  <div className="space-y-6 max-h-[400px] overflow-y-auto pr-2"> {/* Added fixed height and scroll */}
+                    {groupSegmentsWithPauses().map((group, index) => (
+                      <div key={index} className="relative">
+                        <p className="text-light-600 text-sm mb-2 whitespace-pre-wrap">
+                          {group.text}
+                        </p>
+                        {group.pauseDuration > 0 && (
+                          <div className="flex items-center gap-2 mt-4 text-xs text-cyan-500">
+                            <span>⏸</span>
+                            <span className="h-px bg-cyan-500/20 flex-1"></span>
+                            <span>{group.pauseDuration.toFixed(1)}s pause</span>
+                          </div>
+                        )}
+                      </div>
+                    ))}
                   </div>
-                </motion.div>
-              )}
+                </div>
+              </motion.div>
+            )}
             </div>
           </motion.div>
         )}
