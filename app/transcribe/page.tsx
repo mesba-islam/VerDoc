@@ -90,6 +90,9 @@ const WaveformVisualizer = ({ isPlaying }: { isPlaying: boolean }) => {
 
 
 export default function TranscribePage() {
+
+  const [duration, setDuration] = useState<string | null>(null);
+  
   const {
     file,
     audioBlob,
@@ -125,6 +128,17 @@ export default function TranscribePage() {
     };
     handleConversion();
   }, [file, audioBlob, isConverting]);
+
+
+  useEffect(() => {
+    if (audioBlob) {
+      const getDuration = async () => {
+        const durationString = await formatAudioDuration(audioBlob);
+        setDuration(durationString);
+      };
+      getDuration();
+    }
+  }, [audioBlob]);
 
 
    // Type for grouped segments
@@ -192,6 +206,20 @@ export default function TranscribePage() {
     }
   };
 
+  const formatAudioDuration = (audioBlob: Blob) => {
+    const url = URL.createObjectURL(audioBlob);
+    const audio = new Audio(url);
+    
+    return new Promise<string>((resolve) => {
+      audio.addEventListener('loadedmetadata', () => {
+        const minutes = Math.floor(audio.duration / 60);
+        const seconds = Math.floor(audio.duration % 60);
+        URL.revokeObjectURL(url);
+        resolve(`${minutes}:${seconds.toString().padStart(2, '0')}`);
+      });
+    });
+  };
+
   return (
     <div className="flex flex-col items-center gap-6 mt-10">
       <h1 className="text-2xl font-bold bg-gradient-to-r from-cyan-500 to-blue-600 bg-clip-text text-transparent">
@@ -227,9 +255,16 @@ export default function TranscribePage() {
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
               >
-                <span className="text-gray-700 font-medium truncate">
-                  {file.name}
-                </span>
+                <div className="flex items-center gap-3">
+          <span className="text-gray-700 font-medium truncate">
+            {file.name}
+          </span>
+          {duration && (
+            <span className="text-sm text-gray-500">
+              ({duration} min)
+            </span>
+          )}
+        </div>
                 {isConverting && (
                   <span className="text-sm text-cyan-600">
                     {conversionProgress}%
@@ -274,44 +309,43 @@ export default function TranscribePage() {
                 </motion.div>
               )}
 
-            {transcript && (
-              <motion.div
-                className="w-full mt-4"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-              >
-                <div className="p-4 bg-dark-50 rounded-lg">
-                  <h3 className="text-2xl font-semibold mb-4">Transcription</h3>
-                  <div className="space-y-6 max-h-[400px] overflow-y-auto pr-2"> {/* Added fixed height and scroll */}
-                    {groupSegmentsWithPauses().map((group, index) => (
-                      <div key={index} className="relative">
-                        <p className="text-light-600 text-sm mb-2 whitespace-pre-wrap">
-                          {group.text}
-                        </p>
-                        {group.pauseDuration > 0 && (
-                          <div className="flex items-center gap-2 mt-4 text-xs text-cyan-500">
-                            <span>⏸</span>
-                            <span className="h-px bg-cyan-500/20 flex-1"></span>
-                            <span>{group.pauseDuration.toFixed(1)}s pause</span>
-                          </div>
-                        )}
-                      </div>
-                    ))}
-                  </div>
+              {transcript && (
+                <motion.div
+                  className="w-full mt-4"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                >
+                  <div className="p-4 bg-dark-50 rounded-lg">
+                    <h3 className="text-2xl font-semibold mb-4">Transcription</h3>
+                    <div className="space-y-6 max-h-[400px] overflow-y-auto pr-2">
+                      {groupSegmentsWithPauses().map((group, index) => (
+                        <div key={index} className="relative">
+                          <p className="text-light-600 text-sm mb-2 whitespace-pre-wrap">
+                            {group.text}
+                          </p>
+                          {group.pauseDuration > 0 && (
+                            <div className="flex items-center gap-2 mt-4 text-xs text-cyan-500">
+                              <span>⏸</span>
+                              <span className="h-px bg-cyan-500/20 flex-1"></span>
+                              <span>{group.pauseDuration.toFixed(1)}s pause</span>
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
 
-              <ErrorBoundary 
-                FallbackComponent={({ error }) => (
-                  <div className="error-message">
-                    Summary Generation Error: {error.message}
+                    <ErrorBoundary 
+                      FallbackComponent={({ error }) => (
+                        <div className="error-message mt-4 p-3 bg-red-50 text-red-700 rounded-lg">
+                          Summary Generation Error: {error.message}
+                        </div>
+                      )}
+                    >
+                      <SummaryGenerator transcript={transcript} />
+                    </ErrorBoundary>
                   </div>
-                )}
-              >
-                <SummaryGenerator transcript={transcript} />
-              </ErrorBoundary>
-
-                </div>
-              </motion.div>
-            )}
+                </motion.div>
+              )}
             </div>
           </motion.div>
         )}
