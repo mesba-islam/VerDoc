@@ -2,13 +2,14 @@
 
 import { useEffect, useState, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Play, Pause, Download, Loader2 } from "lucide-react";
+import { Play, Pause, Download, Loader2, CheckCircle, Copy } from "lucide-react";
 import DropzoneComponent from "@/app/components/Dropzone";
 import { useFileStore } from "@/app/store";
 import { convertVideoToAudio } from "@/app/ffmpeg";
 import SummaryGenerator from '@/app/components/SummaryGenerator';
 import { ErrorBoundary } from 'react-error-boundary';
 import Link from "next/link";
+import { generateSummaryPDF } from '@/app/generatePdf';
 
 const AudioPlayer = ({ audioBlob }: { audioBlob: Blob }) => {
   const [isPlaying, setIsPlaying] = useState(false);
@@ -96,8 +97,9 @@ export default function TranscribePage() {
   const [isSummaryModalOpen, setIsSummaryModalOpen] = useState(false);
   const [hasGeneratedSummary, setHasGeneratedSummary] = useState(false);
   // const [summaryError, setSummaryError] = useState<string | null>(null);
-  // const [summary, setSummary] = useState<string>('');
-  // const [isCopied, setIsCopied] = useState(false);
+  const [summary, setSummary] = useState('');
+  const [isCopied, setIsCopied] = useState(false);
+
   const {
     file,
     audioBlob,
@@ -226,64 +228,73 @@ export default function TranscribePage() {
   };
 
  // Copy handler function
-//  const handleCopyContent = async () => {
-//   if (!summary) {
-//     setError('No summary to copy');
-//     return;
-//   }
+ const handleCopyContent = async () => {
+  if (!summary) return;
+  
+  try {
+    await navigator.clipboard.writeText(summary);
+    setIsCopied(true);
+    setTimeout(() => setIsCopied(false), 2000); // Reset after 2 seconds
+  } catch (err) {
+    console.error('Failed to copy:', err);
+  }
+};
 
-//   try {
-//     await navigator.clipboard.writeText(summary);
-//     setIsCopied(true);
-//     setTimeout(() => setIsCopied(false), 2000);
-//   } catch (err) {
-//     console.error('Failed to copy:', err);
-//     setError('Failed to copy to clipboard');
-//   }
-// };
+// Pdf convertion handeler
+
+const handleDownloadPDF = () => {
+  if (!summary) return;
+  
+  const dateString = new Date().toISOString().split('T')[0];
+  generateSummaryPDF(summary, `document-summary-${dateString}.pdf`);
+};
+
 
 
   return (
     <div className="container mx-auto px-4 py-10 max-w-4xl">
     
+    {/* Summarize modal starts */}
     <AnimatePresence>
-  {isSummaryModalOpen && (
-    <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      className="fixed inset-0 z-[999] bg-black/50 dark:bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center "
-    >
-      <motion.div
-        initial={{ scale: 0.95, y: 20 }}
-        animate={{ scale: 1, y: 0 }}
-        exit={{ scale: 0.95, y: 20 }}
-        className="w-full max-w-4xl bg-background text-foreground rounded-2xl shadow-xl relative overflow-hidden"
-      >
-       {/* Loading Overlay */}
-        <AnimatePresence>
-          {isTranscribing && (
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="fixed inset-0 z-[999] bg-background/90 backdrop-blur-sm flex items-center justify-center"
-            >
-              <motion.div
-                initial={{ scale: 0.9 }}
-                animate={{ scale: 1 }}
-                className="flex items-center gap-3 text-muted-foreground bg-card px-6 py-4 rounded-lg shadow-lg"
-              >
-                <div className="flex space-x-1">
-                  <div className="w-2 h-2 bg-current rounded-full animate-pulse" />
-                  <div className="w-2 h-2 bg-current rounded-full animate-pulse delay-100" />
-                  <div className="w-2 h-2 bg-current rounded-full animate-pulse delay-200" />
-                </div>
-                <span className="text-sm font-medium">Generating summary...</span>
-              </motion.div>
-            </motion.div>
-          )}
-        </AnimatePresence>
+      {isSummaryModalOpen && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          className="fixed inset-0 z-[999] bg-black/50 dark:bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center "
+        >
+          <motion.div
+            initial={{ scale: 0.95, y: 20 }}
+            animate={{ scale: 1, y: 0 }}
+            exit={{ scale: 0.95, y: 20 }}
+            className="w-full max-w-4xl bg-background text-foreground rounded-2xl shadow-xl relative overflow-hidden"
+          >
+          {/* Loading Overlay */}
+            <AnimatePresence>
+              {isTranscribing && (
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  className="fixed inset-0 z-[999] bg-background/90 backdrop-blur-sm flex items-center justify-center"
+                >
+                  <motion.div
+                    initial={{ scale: 0.9 }}
+                    animate={{ scale: 1 }}
+                    className="flex items-center gap-3 text-muted-foreground bg-card px-6 py-4 rounded-lg shadow-lg"
+                  >
+                    <div className="flex space-x-1">
+                      <div className="w-2 h-2 bg-current rounded-full animate-pulse" />
+                      <div className="w-2 h-2 bg-current rounded-full animate-pulse delay-100" />
+                      <div className="w-2 h-2 bg-current rounded-full animate-pulse delay-200" />
+                    </div>
+                    <span className="text-sm font-medium">Generating summary...</span>
+                  </motion.div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+      {/* Document summarize header*/}
 
         <div className="p-6 border-b border-border flex items-center justify-between">
           <h3 className="text-xl font-semibold text-foreground">
@@ -294,18 +305,22 @@ export default function TranscribePage() {
                   <div className="flex items-center gap-2">
                     {/* Copy Button */}
                     <div className="group relative">
-                    {/* <button
+                    <button
                       onClick={handleCopyContent}
-                      className="p-2 rounded-lg hover:bg-accent transition-colors"
+                      className={`p-2 rounded-lg transition-colors ${
+                        summary 
+                          ? 'hover:bg-accent text-foreground/80 hover:text-foreground' 
+                          : 'text-gray-400 cursor-not-allowed'
+                      }`}
                       disabled={!summary}
-      >
+                    >
                       {isCopied ? (
                         <CheckCircle className="w-5 h-5 text-green-500" />
                       ) : (
                         <Copy className="w-5 h-5 text-gray-500" />
                       )}
                       <span className="sr-only">Copy summary</span>
-                    </button> */}
+                    </button>
                       <span className="absolute -bottom-8 left-1/2 -translate-x-1/2 bg-gray-900 text-gray-100 text-xs px-2 py-1 rounded-md opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap">
                         Copy Content
                       </span>
@@ -314,8 +329,13 @@ export default function TranscribePage() {
                     {/* Download Button */}
                     <div className="group relative">
                       <button
-                        className="p-2 rounded-lg hover:bg-accent transition-colors text-foreground/80 hover:text-foreground"
-                        // onClick={() => handleDownloadPDF()}
+                        className={`p-2 rounded-lg transition-colors ${
+                          summary 
+                            ? 'hover:bg-accent text-foreground/80 hover:text-foreground' 
+                            : 'text-gray-400 cursor-not-allowed'
+                        }`}
+                        onClick={handleDownloadPDF}
+                        disabled={!summary}
                       >
                         <svg
                           xmlns="http://www.w3.org/2000/svg"
@@ -335,49 +355,50 @@ export default function TranscribePage() {
                         </svg>
                       </button>
                       <span className="absolute -bottom-8 left-1/2 -translate-x-1/2 bg-gray-900 text-gray-100 text-xs px-2 py-1 rounded-md opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap">
-                        Download PDF
+                        {summary ? 'Download PDF' : 'Generate summary first'}
                       </span>
                     </div>
                   </div>
                 )}
               </div>
 
-        {/* Modal Content */}
-        <div className="p-6 max-h-[70vh] overflow-y-auto">
-          <ErrorBoundary
-            FallbackComponent={({ error }) => (
-              <div className="text-destructive bg-destructive/10 text-sm p-3 rounded-lg">
-                Error: {error.message}
+              {/* Modal Content */}
+              <div className="p-6 max-h-[70vh] overflow-y-auto">
+                <ErrorBoundary
+                  FallbackComponent={({ error }) => (
+                    <div className="text-destructive bg-destructive/10 text-sm p-3 rounded-lg">
+                      Error: {error.message}
+                    </div>
+                  )}
+                >
+                  <SummaryGenerator 
+                    transcript={transcript || ''}
+                    summary={summary}
+                    onSummaryGenerated={() => setHasGeneratedSummary(true)}
+                    setSummary={setSummary}
+                  />
+                </ErrorBoundary>
               </div>
-            )}
-          >
-            <SummaryGenerator 
-              transcript={transcript || ''}
-              onSummaryGenerated={() => setHasGeneratedSummary(true)}
-              // setSummary={setSummary || ''}
-            />
-          </ErrorBoundary>
-        </div>
 
-        {/* Modal Footer */}
-        <div className="p-4 border-t border-border flex justify-end gap-3">
-          <button
-            onClick={() => {
-              setHasGeneratedSummary(false);
-              setIsSummaryModalOpen(false);
-            }}
-            className="px-4 py-2 bg-white/20 dark:bg-black/20 hover:bg-white/30 dark:hover:bg-black/30    text-black dark:text-white rounded-lg transition-colors"
-          >
-            {hasGeneratedSummary ? 'Close' : 'Cancel'}
-          </button>
-        </div>
-      </motion.div>
-    </motion.div>
-  )}
-</AnimatePresence>
+              {/* Modal Footer */}
+              <div className="p-4 border-t border-border flex justify-end gap-3">
+                <button
+                  onClick={() => {
+                    setHasGeneratedSummary(false);
+                    setIsSummaryModalOpen(false);
+                  }}
+                  className="px-4 py-2 bg-white/20 dark:bg-black/20 hover:bg-white/30 dark:hover:bg-black/30    text-black dark:text-white rounded-lg transition-colors"
+                >
+                  {hasGeneratedSummary ? 'Close' : 'Cancel'}
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
    
 
-    
+    {/* Transcription area */}
       {!file ? (
         // Initial upload state
         <motion.div 
@@ -573,51 +594,51 @@ export default function TranscribePage() {
               
               {/* Replace the ErrorBoundary/SummaryGenerator with this button */}
               <div className="relative group w-fit mx-auto">
-              <button
-  onClick={() => setIsSummaryModalOpen(true)}
-  className="group relative px-8 py-3.5 overflow-hidden rounded-xl border-2 border-cyan-500/30 hover:border-cyan-400 transition-all duration-300"
->
-  {/* Hover background overlay */}
-  <div className="absolute inset-0 -z-10">
-    <div className="absolute inset-0 bg-gradient-to-r from-cyan-700/90 via-cyan-800 to-gray-900 opacity-0 group-hover:opacity-100 transition-opacity duration-300 scale-x-0 group-hover:scale-x-100 origin-left" />
-  </div>
+                        <button
+            onClick={() => setIsSummaryModalOpen(true)}
+            className="group relative px-8 py-3.5 overflow-hidden rounded-xl border-2 border-cyan-500/30 hover:border-cyan-400 transition-all duration-300"
+          >
+            {/* Hover background overlay */}
+            <div className="absolute inset-0 -z-10">
+              <div className="absolute inset-0 bg-gradient-to-r from-cyan-700/90 via-cyan-800 to-gray-900 opacity-0 group-hover:opacity-100 transition-opacity duration-300 scale-x-0 group-hover:scale-x-100 origin-left" />
+            </div>
 
-  {/* Content */}
-  <div className="flex items-center gap-2">
-    <svg
-      xmlns="http://www.w3.org/2000/svg"
-      width="18"
-      height="18"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      className="text-cyan-400 group-hover:text-white transition-colors"
-    >
-      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-      <path d="M14 2v6h6"/>
-      <path d="M16 13H8"/>
-      <path d="M16 17H8"/>
-      <path d="M10 9H8"/>
-    </svg>
-    <span className="bg-gradient-to-r from-cyan-400 to-cyan-300 bg-clip-text text-transparent group-hover:bg-none group-hover:text-white transition-all font-medium">
-      Generate Summary
-    </span>
-  </div>
+            {/* Content */}
+            <div className="flex items-center gap-2">
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="18"
+                height="18"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                className="text-cyan-400 group-hover:text-white transition-colors"
+              >
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                <path d="M14 2v6h6"/>
+                <path d="M16 13H8"/>
+                <path d="M16 17H8"/>
+                <path d="M10 9H8"/>
+              </svg>
+              <span className="bg-gradient-to-r from-cyan-400 to-cyan-300 bg-clip-text text-transparent group-hover:bg-none group-hover:text-white transition-all font-medium">
+                Generate Summary
+              </span>
+            </div>
 
-  {/* Border glow effect */}
-  <div className="absolute inset-0 rounded-xl -z-20 opacity-0 group-hover:opacity-50 blur-[1px] group-hover:blur-[2px] transition-all duration-300 bg-gradient-to-r from-cyan-400/30 to-cyan-600/30" />
-</button>
-  
-  {/* Animated border effect */}
-  <div className="absolute inset-0 rounded-xl pointer-events-none -z-10">
-    <div className="absolute inset-0 bg-gradient-to-r from-cyan-600 to-cyan-800 rounded-xl 
-                    opacity-0 group-hover:opacity-30 blur-sm group-hover:blur-[2px] 
-                    transition-all duration-300" />
-  </div>
-</div>
+            {/* Border glow effect */}
+            <div className="absolute inset-0 rounded-xl -z-20 opacity-0 group-hover:opacity-50 blur-[1px] group-hover:blur-[2px] transition-all duration-300 bg-gradient-to-r from-cyan-400/30 to-cyan-600/30" />
+          </button>
+            
+            {/* Animated border effect */}
+            <div className="absolute inset-0 rounded-xl pointer-events-none -z-10">
+              <div className="absolute inset-0 bg-gradient-to-r from-cyan-600 to-cyan-800 rounded-xl 
+                              opacity-0 group-hover:opacity-30 blur-sm group-hover:blur-[2px] 
+                              transition-all duration-300" />
+            </div>
+          </div>
             </motion.div>
           )}
         </AnimatePresence>

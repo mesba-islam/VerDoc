@@ -5,12 +5,13 @@ import type { SummaryConfig } from '@/app/types';
 
 interface SummaryGeneratorProps {
   transcript: string;
+  summary: string;
   onSummaryGenerated?: () => void;
-  // setSummary: (summary: string) => void;
+  setSummary: (summary: string) => void;
 }
 
-const SummaryGenerator = ({ transcript, onSummaryGenerated  }: SummaryGeneratorProps) => {
-  const [summary, setSummary] = useState<string>('');
+const SummaryGenerator = ({ transcript,summary, onSummaryGenerated, setSummary  }: SummaryGeneratorProps) => {
+  
   const [isGenerating, setIsGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -49,6 +50,7 @@ const SummaryGenerator = ({ transcript, onSummaryGenerated  }: SummaryGeneratorP
 
       const { summary } = await response.json();
       setSummary(summary);
+      
       onSummaryGenerated?.();
     } catch (err) {
       const error = err as Error;

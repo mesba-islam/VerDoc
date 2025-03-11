@@ -30,6 +30,9 @@ module.exports = {
         "card-foreground": "hsl(var(--card-foreground))",
         ring: "hsl(var(--ring))",
       },
+      transitionProperty: {
+        'colors': 'color, background-color, border-color, text-decoration-color, fill, stroke',
+      }
     },
   },
   plugins: [],
