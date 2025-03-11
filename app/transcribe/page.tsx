@@ -8,7 +8,7 @@ import { useFileStore } from "@/app/store";
 import { convertVideoToAudio } from "@/app/ffmpeg";
 import SummaryGenerator from '@/app/components/SummaryGenerator';
 import { ErrorBoundary } from 'react-error-boundary';
-
+import Link from "next/link";
 
 const AudioPlayer = ({ audioBlob }: { audioBlob: Blob }) => {
   const [isPlaying, setIsPlaying] = useState(false);
@@ -92,7 +92,12 @@ const WaveformVisualizer = ({ isPlaying }: { isPlaying: boolean }) => {
 export default function TranscribePage() {
 
   const [duration, setDuration] = useState<string | null>(null);
-  
+  // const [transcript, setTranscript] = useState<string | null>(null);
+  const [isSummaryModalOpen, setIsSummaryModalOpen] = useState(false);
+  const [hasGeneratedSummary, setHasGeneratedSummary] = useState(false);
+  // const [summaryError, setSummaryError] = useState<string | null>(null);
+  // const [summary, setSummary] = useState<string>('');
+  // const [isCopied, setIsCopied] = useState(false);
   const {
     file,
     audioBlob,
@@ -220,136 +225,405 @@ export default function TranscribePage() {
     });
   };
 
+ // Copy handler function
+//  const handleCopyContent = async () => {
+//   if (!summary) {
+//     setError('No summary to copy');
+//     return;
+//   }
+
+//   try {
+//     await navigator.clipboard.writeText(summary);
+//     setIsCopied(true);
+//     setTimeout(() => setIsCopied(false), 2000);
+//   } catch (err) {
+//     console.error('Failed to copy:', err);
+//     setError('Failed to copy to clipboard');
+//   }
+// };
+
+
   return (
-    <div className="flex flex-col items-center gap-6 mt-10">
-      <h1 className="text-2xl font-bold bg-gradient-to-r from-cyan-500 to-blue-600 bg-clip-text text-transparent">
-        Upload Your Video
-      </h1>
-
-      <AnimatePresence>
-        {error && (
-          <motion.div
-            initial={{ opacity: 0, y: -20 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -20 }}
-            className="text-red-500 p-4 bg-red-50 rounded-lg"
-          >
-            {error}
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      <DropzoneComponent />
-
-      <AnimatePresence>
-        {file && (
-          <motion.div
-            initial={{ opacity: 0, scale: 0.9 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.9 }}
-            className="w-full max-w-2xl p-6 bg-dark/80 backdrop-blur-lg rounded-2xl shadow-xl border border-gray-100"
-          >
-            <div className="flex flex-col items-center gap-5">
+    <div className="container mx-auto px-4 py-10 max-w-4xl">
+    
+    <AnimatePresence>
+  {isSummaryModalOpen && (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="fixed inset-0 z-[999] bg-black/50 dark:bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center "
+    >
+      <motion.div
+        initial={{ scale: 0.95, y: 20 }}
+        animate={{ scale: 1, y: 0 }}
+        exit={{ scale: 0.95, y: 20 }}
+        className="w-full max-w-4xl bg-background text-foreground rounded-2xl shadow-xl relative overflow-hidden"
+      >
+       {/* Loading Overlay */}
+        <AnimatePresence>
+          {isTranscribing && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 z-[999] bg-background/90 backdrop-blur-sm flex items-center justify-center"
+            >
               <motion.div
-                className="w-full flex items-center justify-between"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
+                initial={{ scale: 0.9 }}
+                animate={{ scale: 1 }}
+                className="flex items-center gap-3 text-muted-foreground bg-card px-6 py-4 rounded-lg shadow-lg"
               >
-                <div className="flex items-center gap-3">
-          <span className="text-gray-700 font-medium truncate">
-            {file.name}
-          </span>
-          {duration && (
-            <span className="text-sm text-gray-500">
-              ({duration} min)
-            </span>
-          )}
-        </div>
-                {isConverting && (
-                  <span className="text-sm text-cyan-600">
-                    {conversionProgress}%
-                  </span>
-                )}
+                <div className="flex space-x-1">
+                  <div className="w-2 h-2 bg-current rounded-full animate-pulse" />
+                  <div className="w-2 h-2 bg-current rounded-full animate-pulse delay-100" />
+                  <div className="w-2 h-2 bg-current rounded-full animate-pulse delay-200" />
+                </div>
+                <span className="text-sm font-medium">Generating summary...</span>
               </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
-              {isConverting && (
-                <motion.div
-                  className="w-full h-2 bg-gray-200 rounded-full overflow-hidden"
-                  initial={{ scaleX: 0 }}
-                  animate={{ scaleX: 1 }}
-                >
-                  <div
-                    className="h-full bg-gradient-to-r from-cyan-400 to-blue-500 transition-all duration-300"
-                    style={{ width: `${conversionProgress}%` }}
-                  />
-                </motion.div>
-              )}
-
-              {audioBlob && (
-                <motion.div
-                  className="w-full"
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                >
-                  <AudioPlayer audioBlob={audioBlob} />
-                  
-                  {!transcript && (
-                    <motion.button
-                      onClick={handleTranscription}
-                      disabled={isTranscribing}
-                      className="mt-4 w-full py-3 px-6 bg-cyan-600 hover:bg-cyan-700 text-white rounded-lg font-medium transition-colors disabled:opacity-50"
-                    >
-                      {isTranscribing ? (
-                        <Loader2 className="h-5 w-5 animate-spin mx-auto" />
+        <div className="p-6 border-b border-border flex items-center justify-between">
+          <h3 className="text-xl font-semibold text-foreground">
+            {hasGeneratedSummary ? "Document Preview" : "Generate Summary"}
+          </h3>
+  
+                {hasGeneratedSummary && (
+                  <div className="flex items-center gap-2">
+                    {/* Copy Button */}
+                    <div className="group relative">
+                    {/* <button
+                      onClick={handleCopyContent}
+                      className="p-2 rounded-lg hover:bg-accent transition-colors"
+                      disabled={!summary}
+      >
+                      {isCopied ? (
+                        <CheckCircle className="w-5 h-5 text-green-500" />
                       ) : (
-                        "Transcribe Audio"
+                        <Copy className="w-5 h-5 text-gray-500" />
                       )}
-                    </motion.button>
-                  )}
-                </motion.div>
-              )}
-
-              {transcript && (
-                <motion.div
-                  className="w-full mt-4"
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                >
-                  <div className="p-4 bg-dark-50 rounded-lg">
-                    <h3 className="text-2xl font-semibold mb-4">Transcription</h3>
-                    <div className="space-y-6 max-h-[400px] overflow-y-auto pr-2">
-                      {groupSegmentsWithPauses().map((group, index) => (
-                        <div key={index} className="relative">
-                          <p className="text-light-600 text-sm mb-2 whitespace-pre-wrap">
-                            {group.text}
-                          </p>
-                          {group.pauseDuration > 0 && (
-                            <div className="flex items-center gap-2 mt-4 text-xs text-cyan-500">
-                              <span>⏸</span>
-                              <span className="h-px bg-cyan-500/20 flex-1"></span>
-                              <span>{group.pauseDuration.toFixed(1)}s pause</span>
-                            </div>
-                          )}
-                        </div>
-                      ))}
+                      <span className="sr-only">Copy summary</span>
+                    </button> */}
+                      <span className="absolute -bottom-8 left-1/2 -translate-x-1/2 bg-gray-900 text-gray-100 text-xs px-2 py-1 rounded-md opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap">
+                        Copy Content
+                      </span>
                     </div>
 
-                    <ErrorBoundary 
-                      FallbackComponent={({ error }) => (
-                        <div className="error-message mt-4 p-3 bg-red-50 text-red-700 rounded-lg">
-                          Summary Generation Error: {error.message}
-                        </div>
-                      )}
-                    >
-                      <SummaryGenerator transcript={transcript} />
-                    </ErrorBoundary>
+                    {/* Download Button */}
+                    <div className="group relative">
+                      <button
+                        className="p-2 rounded-lg hover:bg-accent transition-colors text-foreground/80 hover:text-foreground"
+                        // onClick={() => handleDownloadPDF()}
+                      >
+                        <svg
+                          xmlns="http://www.w3.org/2000/svg"
+                          width="24"
+                          height="24"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          className="w-5 h-5"
+                        >
+                          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                          <polyline points="7 10 12 15 17 10" />
+                          <line x1="12" y1="15" x2="12" y2="3" />
+                        </svg>
+                      </button>
+                      <span className="absolute -bottom-8 left-1/2 -translate-x-1/2 bg-gray-900 text-gray-100 text-xs px-2 py-1 rounded-md opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap">
+                        Download PDF
+                      </span>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+        {/* Modal Content */}
+        <div className="p-6 max-h-[70vh] overflow-y-auto">
+          <ErrorBoundary
+            FallbackComponent={({ error }) => (
+              <div className="text-destructive bg-destructive/10 text-sm p-3 rounded-lg">
+                Error: {error.message}
+              </div>
+            )}
+          >
+            <SummaryGenerator 
+              transcript={transcript || ''}
+              onSummaryGenerated={() => setHasGeneratedSummary(true)}
+              // setSummary={setSummary || ''}
+            />
+          </ErrorBoundary>
+        </div>
+
+        {/* Modal Footer */}
+        <div className="p-4 border-t border-border flex justify-end gap-3">
+          <button
+            onClick={() => {
+              setHasGeneratedSummary(false);
+              setIsSummaryModalOpen(false);
+            }}
+            className="px-4 py-2 bg-white/20 dark:bg-black/20 hover:bg-white/30 dark:hover:bg-black/30    text-black dark:text-white rounded-lg transition-colors"
+          >
+            {hasGeneratedSummary ? 'Close' : 'Cancel'}
+          </button>
+        </div>
+      </motion.div>
+    </motion.div>
+  )}
+</AnimatePresence>
+   
+
+    
+      {!file ? (
+        // Initial upload state
+        <motion.div 
+          className="flex flex-col items-center gap-8 p-8 bg-gradient-to-b from-dark to-gray-50 rounded-2xl shadow-sm "
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4 }}
+        >
+          <h1 className="text-3xl font-bold bg-gradient-to-r from-cyan-500 to-blue-600 bg-clip-text text-transparent">
+            Upload Your Media
+          </h1>
+          <p className="text-gray-400 text-center max-w-md">
+            Upload your video or audio file to transcribe and summarize its content
+          </p>
+          
+          <AnimatePresence>
+            {error && (
+              <motion.div
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                className="w-full text-red-500 p-4 bg-red-50 rounded-lg border border-red-100 flex items-center gap-2"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="flex-shrink-0">
+                  <circle cx="12" cy="12" r="10"/>
+                  <line x1="12" y1="8" x2="12" y2="12"/>
+                  <line x1="12" y1="16" x2="12.01" y2="16"/>
+                </svg>
+                <span>{error}</span>
+              </motion.div>
+            )}
+          </AnimatePresence>
+          
+          <div className="max-w-lg">
+            <DropzoneComponent />
+          </div>
+          
+          <div className="mt-4 text-sm text-gray-400 flex items-center gap-2">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+              <polyline points="7 10 12 15 17 10"/>
+              <line x1="12" y1="15" x2="12" y2="3"/>
+            </svg>
+            <span>Supported formats: MP4, MP3, WAV, AAC</span>
+          </div>
+        </motion.div>
+      ) : (
+        // Post-upload workflow
+        <motion.div
+          layout
+          className="w-full rounded-2xl overflow-hidden bg-dark border border-gradient-to-r from-cyan-500 to-blue-600 shadow-md"
+        >
+          {/* Header with file info */}
+          <div className="bg-gradient-to-r from-cyan-500 to-dark-600 p-4 text-white">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <polygon points="23 7 16 12 23 17 23 7"/>
+                  <rect x="1" y="5" width="15" height="14" rx="2" ry="2"/>
+                </svg>
+                <span className="font-medium truncate max-w-xs">
+                  {file.name}
+                </span>
+                {duration && (
+                  <span className="text-sm opacity-90">
+                    ({duration} min)
+                  </span>
+                )}
+              </div>
+              <Link href="/transcribe">
+              <button 
+                onClick={() => {/* Add function to reset/upload new file */}}
+                className="text-xs bg-white/20 dark:bg-black/20 hover:bg-white/30 dark:hover:bg-black/30 
+               text-black dark:text-white rounded-full px-3 py-1 transition-colors"
+              >
+                New Upload
+              </button>
+              </Link>
+            </div>
+          </div>
+          
+          {/* Content area */}
+          <div className="p-6">
+            {/* Conversion progress */}
+            <AnimatePresence>
+              {isConverting && (
+                <motion.div 
+                  className="mb-6"
+                  initial={{ opacity: 0, y: -10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0 }}
+                >
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-sm font-medium text-gray-700">Converting to audio...</span>
+                    <span className="text-sm font-medium text-cyan-600">{conversionProgress}%</span>
+                  </div>
+                  <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
+                    <motion.div
+                      className="h-full bg-gradient-to-r from-cyan-400 to-dark-500"
+                      style={{ width: `${conversionProgress}%` }}
+                      initial={{ width: "0%" }}
+                      animate={{ width: `${conversionProgress}%` }}
+                      transition={{ type: "spring", damping: 25 }}
+                    />
                   </div>
                 </motion.div>
               )}
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+            </AnimatePresence>
+            
+            {/* Audio player */}
+            <AnimatePresence>
+              {audioBlob && (
+                <motion.div
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="mb-6 p-4 bg-blend-darken-50 rounded-xl"
+                >
+                  <h3 className="text-lg font-medium text-gray-800 mb-3">Audio</h3>
+                  <AudioPlayer audioBlob={audioBlob} />
+                </motion.div>
+              )}
+            </AnimatePresence>
+            
+            {/* Transcribe action */}
+            <AnimatePresence>
+              {audioBlob && !transcript && (
+                <motion.div
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="mb-6"
+                >
+                  <button
+                    onClick={handleTranscription}
+                    disabled={isTranscribing}
+                    className="w-full py-3 px-6 
+                              bg-gradient-to-r from-cyan-400 to-gray-900 
+                              dark:from-cyan-500 dark:to-gray-800
+                              hover:from-cyan-300 hover:to-gray-700 
+                              dark:hover:from-cyan-600 dark:hover:to-gray-900
+                              text-white rounded-lg font-semibold 
+                              transition-all duration-300 ease-in-out shadow-lg 
+                              hover:shadow-xl disabled:opacity-50 
+                              flex items-center justify-center gap-2"
+                  >
+                    {isTranscribing ? (
+                      <>
+                        <Loader2 className="h-5 w-5 animate-spin" />
+                        <span>Transcribing Audio...</span>
+                      </>
+                    ) : (
+                      <>
+                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M21 15c0-4.625-3.507-8.447-8-8.941V4a1 1 0 0 0-2 0v2.059c-4.493.494-8 4.316-8 8.941v2a1 1 0 0 0 1 1h16a1 1 0 0 0 1-1v-2z"/>
+                          <path d="M10 20a2 2 0 0 0 4 0"/>
+                        </svg>
+                        <span>Transcribe Audio</span>
+                      </>
+                    )}
+                  </button>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            
+            {/* Transcript display */}
+            <AnimatePresence>
+          {transcript && (
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="mb-6"
+            >
+              <div className="border-b border-gray-200 pb-3 mb-4">
+                <h3 className="text-xl font-semibold text-white-500">Transcript</h3>
+              </div>
+              
+              <div className="max-h-64 overflow-y-auto pr-2 mb-6 scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100">
+                {groupSegmentsWithPauses().map((group, index) => (
+                  <div key={index} className="mb-4 last:mb-0">
+                    <p className="text-white-400 whitespace-pre-wrap leading-relaxed">
+                      {group.text}
+                    </p>
+                    {group.pauseDuration > 0 && (
+                      <div className="flex items-center gap-2 mt-2 text-xs text-cyan-500">
+                        <span>⏸</span>
+                        <span className="h-px bg-cyan-100 flex-1"></span>
+                        <span>{group.pauseDuration.toFixed(1)}s pause</span>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+              
+              {/* Replace the ErrorBoundary/SummaryGenerator with this button */}
+              <div className="relative group w-fit mx-auto">
+              <button
+  onClick={() => setIsSummaryModalOpen(true)}
+  className="group relative px-8 py-3.5 overflow-hidden rounded-xl border-2 border-cyan-500/30 hover:border-cyan-400 transition-all duration-300"
+>
+  {/* Hover background overlay */}
+  <div className="absolute inset-0 -z-10">
+    <div className="absolute inset-0 bg-gradient-to-r from-cyan-700/90 via-cyan-800 to-gray-900 opacity-0 group-hover:opacity-100 transition-opacity duration-300 scale-x-0 group-hover:scale-x-100 origin-left" />
+  </div>
+
+  {/* Content */}
+  <div className="flex items-center gap-2">
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      width="18"
+      height="18"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className="text-cyan-400 group-hover:text-white transition-colors"
+    >
+      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+      <path d="M14 2v6h6"/>
+      <path d="M16 13H8"/>
+      <path d="M16 17H8"/>
+      <path d="M10 9H8"/>
+    </svg>
+    <span className="bg-gradient-to-r from-cyan-400 to-cyan-300 bg-clip-text text-transparent group-hover:bg-none group-hover:text-white transition-all font-medium">
+      Generate Summary
+    </span>
+  </div>
+
+  {/* Border glow effect */}
+  <div className="absolute inset-0 rounded-xl -z-20 opacity-0 group-hover:opacity-50 blur-[1px] group-hover:blur-[2px] transition-all duration-300 bg-gradient-to-r from-cyan-400/30 to-cyan-600/30" />
+</button>
+  
+  {/* Animated border effect */}
+  <div className="absolute inset-0 rounded-xl pointer-events-none -z-10">
+    <div className="absolute inset-0 bg-gradient-to-r from-cyan-600 to-cyan-800 rounded-xl 
+                    opacity-0 group-hover:opacity-30 blur-sm group-hover:blur-[2px] 
+                    transition-all duration-300" />
+  </div>
+</div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+          </div>
+        </motion.div>
+      )}
     </div>
   );
 }
