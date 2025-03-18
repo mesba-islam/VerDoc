@@ -1,19 +1,19 @@
 "use client";
-
+import useUser  from "@/app/hook/useUser";
 import { usePathname } from "next/navigation";
 import Link from "next/link";
-import { AudioWaveform, UserRoundCog, Settings, FileClock } from "lucide-react";
+import { AudioWaveform, Settings, FileClock } from "lucide-react";
 import { Suspense } from "react";
 import ThemeToggle from "./ThemeToggle";
 import UserProfile from "@/components/supaauth/user-profile";
 
 export default function Navbar() {
   const pathname = usePathname(); 
-
+  const { data, isLoading  } = useUser();
   const navItems = [
     { href: "/transcribe", icon: AudioWaveform },
     { href: "/history", icon: FileClock },
-    { href: "/profile", icon: UserRoundCog },
+    // { href: "/profile", icon: UserRoundCog },
     { href: "/settings", icon: Settings },
   ];
 
@@ -41,11 +41,28 @@ export default function Navbar() {
           </li>
         ))}
       </ul>
+      {/* Right side group */}
       <div className="flex items-center gap-3">
-        <UserProfile />
-        <Suspense fallback={<div className="h-9 w-9 rounded-full bg-muted" />}>
-          <ThemeToggle />
-        </Suspense>
+        {isLoading ? (
+          <div className="h-9 w-9 rounded-full bg-muted animate-pulse" />
+        ) : data ? (
+          <>
+            <UserProfile />
+            <Suspense fallback={<div className="h-9 w-9 rounded-full bg-muted" />}>
+              <ThemeToggle />
+            </Suspense>
+          </>
+        ) : (
+          <>
+            <Link
+              href="/signin"
+              className="px-4 py-2 text-sm font-medium rounded-md bg-secondary text-secondary-foreground hover:bg-secondary/90"
+            >
+              Sign In
+            </Link>
+            <ThemeToggle />
+          </>
+        )}
       </div>
     </nav>
   );

@@ -15,22 +15,26 @@ import { AiOutlineLoading3Quarters } from "react-icons/ai";
 import useUser from "@/app/hook/useUser";
 import ManageProfile from "./manage-profile";
 import Avatar from "./avatar";
+import { useQueryClient } from "@tanstack/react-query";
+
+
 
 export default function UserProfile() {
 	const [isSignOut, startSignOut] = useTransition();
 	const router = useRouter();
 	const { data } = useUser();
-
+	const queryClient = useQueryClient();
 	const signout = () => {
 		startSignOut(async () => {
 			const supabase = createSupabaseBrowser();
 			await supabase.auth.signOut();
+			queryClient.invalidateQueries({ queryKey: ['user'] });
 			router.push("/signin");
 		});
 	};
 
 	return (
-		<div className="w-full">
+		<div className="w-full flex items-center">
 			<Popover>
 				<PopoverTrigger>
 					<Avatar />

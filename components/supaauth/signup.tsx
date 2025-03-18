@@ -243,7 +243,7 @@ export default function SignUp({ redirectTo }: { redirectTo: string }) {
 					/>
 					<Button
 						type="submit"
-						className="w-full h-8 bg-indigo-500 hover:bg-indigo-600 transition-all text-white flex items-center gap-2"
+						className="w-full h-8 bg-cyan-500 hover:bg-cyan-600 transition-all text-white flex items-center gap-2"
 					>
 						<AiOutlineLoading3Quarters
 							className={cn(

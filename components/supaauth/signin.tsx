@@ -156,14 +156,14 @@ export function SignInForm({ redirectTo }: { redirectTo: string }) {
 				/>
 				<Button
 					type="submit"
-					className="w-full h-8 bg-indigo-500 hover:bg-indigo-600 transition-all text-white flex items-center gap-2"
+					className="w-full h-8 bg-cyan-500 hover:bg-cyan-600 transition-all text-white flex items-center gap-2"
 				>
 					<AiOutlineLoading3Quarters
 						className={cn(
 							!isPending ? "hidden" : "block animate-spin"
 						)}
 					/>
-					Continue
+					Login
 				</Button>
 			</form>
 			<div className="text-center text-sm">
