@@ -5,6 +5,7 @@ import Link from "next/link";
 import { AudioWaveform, UserRoundCog, Settings, FileClock } from "lucide-react";
 import { Suspense } from "react";
 import ThemeToggle from "./ThemeToggle";
+import UserProfile from "@/components/supaauth/user-profile";
 
 export default function Navbar() {
   const pathname = usePathname(); 
@@ -40,11 +41,12 @@ export default function Navbar() {
           </li>
         ))}
       </ul>
-
-      {/* Right - Theme Toggle */}
-      <Suspense fallback={<div>Loading...</div>}>
-        <ThemeToggle />
-      </Suspense>
+      <div className="flex items-center gap-3">
+        <UserProfile />
+        <Suspense fallback={<div className="h-9 w-9 rounded-full bg-muted" />}>
+          <ThemeToggle />
+        </Suspense>
+      </div>
     </nav>
   );
 }

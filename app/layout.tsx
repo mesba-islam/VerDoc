@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import Navbar from "./components/Navbar";
+import { Providers } from './providers'
 
 // Import Fonts
 const geistSans = Geist({
@@ -23,13 +24,14 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en">
       <body className={`${geistSans.variable} ${geistMono.variable} antialiased bg-background text-foreground`}>
-        
+      <Providers>
         {/* Global Navigation */}
-        <Navbar /> 
-        
+         <Navbar /> 
+         
         {/* Page Content */}
         <main className="container mx-auto p-6">{children}</main>
-
+        </Providers>
+        
       </body>
     </html>
   );
