@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import SummaryConfigurator from './SummaryConfigurator';
 import type { SummaryConfig } from '@/app/types';
+// import { createSupabaseBrowser } from '@/lib/supabase/client';
 
 interface SummaryGeneratorProps {
   transcript: string;
@@ -52,11 +53,23 @@ const SummaryGenerator = ({ transcript,summary, onSummaryGenerated, setSummary  
       setSummary(summary);
       
       onSummaryGenerated?.();
-    } catch (err) {
-      const error = err as Error;
-      console.error('Summary generation error:', error);
-      setError(error.message || 'Failed to generate summary');
-    } finally {
+     } 
+      catch (err) {
+        const error = err as Error;
+        console.error('Summary generation error:', error);
+        
+        // Handle unauthorized error
+        if (error.message.includes('Unauthorized')) {
+          setError('Redirecting to login...');
+          // Redirect to login page after short delay to show message
+          setTimeout(() => {
+            window.location.href = '/login'; // Your login page route
+          }, 1500);
+          return;
+        }
+      
+        setError(error.message || 'Failed to generate summary');
+      } finally {
       setIsGenerating(false);
     }
   };
