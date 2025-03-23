@@ -34,6 +34,7 @@ export default function Dropzone() {
     }, 300);
   };
 
+  
   const { getRootProps, getInputProps, isDragActive } = useDropzone({ onDrop });
 
   return (

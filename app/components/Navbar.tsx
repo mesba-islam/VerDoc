@@ -12,7 +12,7 @@ export default function Navbar() {
   const { data, isLoading  } = useUser();
   const navItems = [
     { href: "/transcribe", icon: AudioWaveform },
-    { href: "/history", icon: FileClock },
+    { href: "/archive", icon: FileClock },
     // { href: "/profile", icon: UserRoundCog },
     { href: "/settings", icon: Settings },
   ];

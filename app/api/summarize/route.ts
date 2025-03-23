@@ -74,14 +74,17 @@ export async function POST(request: Request) {
       temperature: config.formality === 'technical' ? 0.3 : 0.5,
       max_tokens: config.length === 'detailed' ? 1500 : 750
     });
-    const generatedSummary = completion.choices[0].message.content || "";
+    const generatedSummary = completion.choices[0].message.content?.trim() || "";
+    const summaryTitle = generatedSummary.split('\n')[0].substring(0, 50);
 
     // Save generated summary to the database
     const { error: insertError } = await supabase
       .from('summaries')
       .insert({
         user_id: user.id,
-        content: generatedSummary
+        content: generatedSummary,
+        title: summaryTitle,
+        created_at: new Date().toISOString()
       });
 
     if (insertError) {
@@ -103,7 +106,7 @@ export async function POST(request: Request) {
 }
 
 function buildDynamicPrompt(text: string, config: SummaryConfig): string {
-  let prompt = `Create a professional executive summary with these requirements:\n`;
+  let prompt = `Create a professional executive summary make it clean text remove any unnecessary characters with these requirements:\n`;
   
   prompt += `- Tone: ${config.formality}\n`;
   prompt += `- Length: ${config.length}\n`;
@@ -115,10 +118,10 @@ function buildDynamicPrompt(text: string, config: SummaryConfig): string {
 
   prompt += `\Follow this structure:\n${
     config.length === 'short' ? 
-    `1. Overview\n2. Key Points` :
+    `1.Title make it without the label\n2.Overview\n3. Key Points` :
     config.length === 'medium' ?
-    `1. Introduction\n2. Main Findings\n3. Recommendations` :
-    `1. Executive Overview\n2. Methodology\n3. Key Insights\n4. Strategic Recommendations\n5. Action Plan`
+    `1.Title make it without the label\n 2.Introduction\n3. Main Findings\n4. Recommendations` :
+    `1.Title make it without the label\n2. Executive Overview\n3. Methodology\n4. Key Insights\n5. Strategic Recommendations\n6. Action Plan`
   }\n\nText to summarize:\n${text}`;
 
   return prompt;

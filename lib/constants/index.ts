@@ -1,2 +1,2 @@
-export const protectedPaths = ["/dashboard", "/transcribe"];
+export const protectedPaths = ["/archive", "/transcribe"];
 export const authPaths = ["/register", "/signin"];
