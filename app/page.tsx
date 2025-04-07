@@ -1,8 +1,11 @@
-// import Link from "next/link";
+import { PricingPlans } from '@/app/components/PricingPlans';
 
 export default function home() {
   return (
-    <div className="w-full flex items-center justify-center text-4xl font-bold">Home</div>
+    <main className="min-h-screen py-12">
+      <h1 className="text-4xl font-bold text-center mb-8">Choose Your Plan</h1>
+      <PricingPlans />
+    </main>
+    
   );
 }
-
