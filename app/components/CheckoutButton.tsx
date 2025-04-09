@@ -1,6 +1,5 @@
 'use client';
 
-// import { useEffect, useState } from 'react';
 import { Paddle } from '@paddle/paddle-js';
 
 declare global {
@@ -9,9 +8,11 @@ declare global {
   }
 }
 
-export function CheckoutButton({ priceId, isPaddleReady }: { 
+export function CheckoutButton({ priceId, isPaddleReady, price, isStarter = false }: { 
   priceId: string; 
-  isPaddleReady: boolean; 
+  isPaddleReady: boolean;
+  price: string;
+  isStarter:boolean; 
 }) {
   const handleCheckout = () => {
     if (!window.Paddle) return;
@@ -23,11 +24,15 @@ export function CheckoutButton({ priceId, isPaddleReady }: {
 
   return (
     <button
-      onClick={handleCheckout}
-      disabled={!isPaddleReady}
-      className="w-full bg-blue-600 text-white py-2 px-4 rounded hover:bg-blue-700 transition-colors disabled:opacity-50"
-    >
-      Subscribe
-    </button>
+    onClick={handleCheckout}
+    disabled={!isPaddleReady}
+    className={`w-full py-3 px-6 rounded-lg font-semibold transition-colors ${
+      isStarter 
+        ? 'bg-primary text-black hover:bg-primary/90' 
+        : 'bg-gray-900 text-white hover:bg-gray-800'
+    } ${!isPaddleReady ? 'opacity-50 cursor-not-allowed' : ''}`}
+  >
+    {isPaddleReady ? `Choose Plan - ${price}` : 'Loading...'}
+  </button>
   );
 }

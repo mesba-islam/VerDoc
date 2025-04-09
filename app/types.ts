@@ -18,4 +18,7 @@ export type SummaryConfig = {
     monthly_price_id: string | null;
     yearly_price_id: string | null;
     paddle_price_id: string;
+    billing_interval: 'month' | 'year' | null;
+    price: number;
+    video_to_audio_unlimited: boolean;
   };
