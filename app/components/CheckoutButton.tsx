@@ -28,7 +28,7 @@ export function CheckoutButton({ priceId, isPaddleReady, price, isStarter = fals
     disabled={!isPaddleReady}
     className={`w-full py-3 px-6 rounded-lg font-semibold transition-colors ${
       isStarter 
-        ? 'bg-primary text-black hover:bg-primary/90' 
+        ? 'bg-primary text-primary-foreground hover:bg-primary/90' 
         : 'bg-gray-900 text-white hover:bg-gray-800'
     } ${!isPaddleReady ? 'opacity-50 cursor-not-allowed' : ''}`}
   >

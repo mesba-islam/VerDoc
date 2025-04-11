@@ -148,24 +148,24 @@ export function PricingPlans() {
 
         {/* Paid Plans */}
         {paidPlans
-  .filter(plan => plan.billing_interval === billingInterval)
-  .map((plan) => (
-    <div 
-      key={plan.id}
-      className={`relative border rounded-xl p-6 shadow-lg hover:shadow-xl transition-shadow ${
-        plan.name === 'Starter' ? 'border-2 border-primary' : 'border-border'  // Changed to Starter
-      }`}
-    >
-      {plan.name === 'Starter' && (  // Changed from Pro to Starter
-        <div className="absolute top-0 right-0 bg-primary text-primary-foreground px-4 py-1 rounded-bl-xl text-sm font-semibold">
-          Most Popular
-        </div>
-      )}
-      
-      <h3 className="text-2xl font-bold mb-2">{plan.name}</h3>
-      <p className="text-muted-foreground mb-4">
-        {plan.name === 'Starter' ? 'Most popular choice' : 'Advanced features'}
-      </p>
+          .filter(plan => plan.billing_interval === billingInterval)
+          .map((plan) => (
+            <div 
+              key={plan.id}
+              className={`relative border rounded-xl p-6 shadow-lg hover:shadow-xl transition-shadow ${
+                plan.name === 'Starter' ? 'border-2 border-primary' : 'border-border'  // Changed to Starter
+              }`}
+            >
+              {plan.name === 'Starter' && (  // Changed from Pro to Starter
+                <div className="absolute top-0 right-0 bg-primary text-primary-foreground px-4 py-1 rounded-bl-xl text-sm font-semibold">
+                  Most Popular
+                </div>
+              )}
+              
+              <h3 className="text-2xl font-bold mb-2">{plan.name}</h3>
+              <p className="text-muted-foreground mb-4">
+                {plan.name === 'Starter' ? 'Most popular choice' : 'Advanced features'}
+              </p>
 
               <div className="mb-6">
                 <span className="text-4xl font-bold">${plan.price}</span>
@@ -195,7 +195,7 @@ export function PricingPlans() {
                     valid={plan.transcription_mins > 0}
                   />
                   <PlanFeature 
-                    label={`Executive Summary: ${plan.summarization_limit === null ? 'Unlimited' : (plan.summarization_limit > 0 ? plan.summarization_limit : 'Not available')} pdf`}
+                    label={`Executive Summary: ${plan.summarization_limit === null ? 'Unlimited' : (plan.summarization_limit > 0 ? plan.summarization_limit : 'Not available')} p6df`}
                     valid={plan.summarization_limit === null || plan.summarization_limit > 0}
                   />
                 </div>
