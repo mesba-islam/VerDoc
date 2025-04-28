@@ -11,10 +11,7 @@ export default function Social({ redirectTo }: { redirectTo: string }) {
 		await supbase.auth.signInWithOAuth({
 			provider,
 			options: {
-				redirectTo:
-					window.location.origin +
-					`/auth/callback?next=` +
-					redirectTo,
+					redirectTo: `${window.location.origin}/api/auth/callback?next=${encodeURIComponent(redirectTo)}`
 			},
 		});
 	};

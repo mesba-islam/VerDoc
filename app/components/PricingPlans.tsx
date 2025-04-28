@@ -148,39 +148,29 @@ export function PricingPlans() {
 
         {/* Paid Plans */}
         {paidPlans
-  .filter(plan => plan.billing_interval === billingInterval)
-  .map((plan) => (
-    <div 
-      key={plan.id}
-      className={`relative border rounded-xl p-6 shadow-lg hover:shadow-xl transition-shadow ${
-        plan.name === 'Starter' ? 'border-2 border-primary' : 'border-border'  // Changed to Starter
-      }`}
-    >
-      {plan.name === 'Starter' && (  // Changed from Pro to Starter
-        <div className="absolute top-0 right-0 bg-primary text-primary-foreground px-4 py-1 rounded-bl-xl text-sm font-semibold">
-          Most Popular
-        </div>
-      )}
-      
-      <h3 className="text-2xl font-bold mb-2">{plan.name}</h3>
-      <p className="text-muted-foreground mb-4">
-        {plan.name === 'Starter' ? 'Most popular choice' : 'Advanced features'}
-      </p>
+          .filter(plan => plan.billing_interval === billingInterval)
+          .map((plan) => (
+            <div 
+              key={plan.id}
+              className={`relative border rounded-xl p-6 shadow-lg hover:shadow-xl transition-shadow ${
+                plan.name === 'Starter' ? 'border-2 border-primary' : 'border-border'  // Changed to Starter
+              }`}
+            >
+              {plan.name === 'Starter' && (  // Changed from Pro to Starter
+                <div className="absolute top-0 right-0 bg-primary text-primary-foreground px-4 py-1 rounded-bl-xl rounded-tr-xl text-sm font-semibold">
+                Most Popular
+              </div>
+              )}
+              
+              <h3 className="text-2xl font-bold mb-2">{plan.name}</h3>
+              <p className="text-muted-foreground mb-4">
+                {plan.name === 'Starter' ? 'Most popular choice' : 'Advanced features'}
+              </p>
 
               <div className="mb-6">
                 <span className="text-4xl font-bold">${plan.price}</span>
                 <span className="text-muted-foreground ml-2">/ {plan.billing_interval}</span>
               </div>
-
-              {/* <div className="flex-1 space-y-3 mb-6">
-                <PlanFeature label={`Upload Limit: ${plan.upload_limit_mb}MB`} />
-                <PlanFeature label="Video to Audio Conversion: Unlimited"/>
-                <PlanFeature label={`Transcription: ${plan.transcription_mins} mins`} />
-                <PlanFeature 
-                  label={`Summarization: ${plan.summarization_limit === null ? 'Unlimited' : plan.summarization_limit}`} 
-                />
-              </div> */}
-
                 <div className="flex-1 space-y-3 mb-6">
                   <PlanFeature 
                     label={`Upload Limit: ${plan.upload_limit_mb}MB`}

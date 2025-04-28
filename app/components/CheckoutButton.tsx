@@ -1,6 +1,8 @@
 'use client';
 
 import { Paddle } from '@paddle/paddle-js';
+import { useRouter } from 'next/navigation';
+import useUser from '@/app/hook/useUser';
 
 declare global {
   interface Window {
@@ -14,7 +16,15 @@ export function CheckoutButton({ priceId, isPaddleReady, price, isStarter = fals
   price: string;
   isStarter:boolean; 
 }) {
+
+  const { data: user } = useUser();
+  const router = useRouter();
+
   const handleCheckout = () => {
+    if (!user) {
+      router.push('/register');
+      return;
+    }
     if (!window.Paddle) return;
     
     window.Paddle.Checkout.open({
@@ -28,7 +38,7 @@ export function CheckoutButton({ priceId, isPaddleReady, price, isStarter = fals
     disabled={!isPaddleReady}
     className={`w-full py-3 px-6 rounded-lg font-semibold transition-colors ${
       isStarter 
-        ? 'bg-primary text-black hover:bg-primary/90' 
+        ? 'bg-primary text-primary-foreground hover:bg-primary/90' 
         : 'bg-gray-900 text-white hover:bg-gray-800'
     } ${!isPaddleReady ? 'opacity-50 cursor-not-allowed' : ''}`}
   >
