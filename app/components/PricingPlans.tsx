@@ -195,6 +195,7 @@ export function PricingPlans() {
                 isPaddleReady={paddleInitialized}
                 price={`$${plan.price}/${plan.billing_interval}`}
                 isStarter={plan.name === 'Starter'}
+                planId={plan.id}
               />
             </div>
           ))}

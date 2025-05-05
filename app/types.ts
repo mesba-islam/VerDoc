@@ -22,3 +22,9 @@ export type SummaryConfig = {
     price: number;
     video_to_audio_unlimited: boolean;
   };
+
+  declare module '@paddle/paddle-js' {
+    export interface CheckoutOptions {
+      passthrough?: string;
+    }
+  }

@@ -10,11 +10,12 @@ declare global {
   }
 }
 
-export function CheckoutButton({ priceId, isPaddleReady, price, isStarter = false }: { 
+export function CheckoutButton({ priceId, isPaddleReady, price, isStarter = false, planId  }: { 
   priceId: string; 
   isPaddleReady: boolean;
   price: string;
-  isStarter:boolean; 
+  isStarter:boolean;
+  planId: string; 
 }) {
 
   const { data: user } = useUser();
@@ -29,7 +30,12 @@ export function CheckoutButton({ priceId, isPaddleReady, price, isStarter = fals
     
     window.Paddle.Checkout.open({
       items: [{ priceId, quantity: 1 }],
+      customData: {
+        user_id: user.id,
+        plan_id: planId, // You'll need to pass this to the CheckoutButton props
+      },
     });
+    
   };
 
   return (
