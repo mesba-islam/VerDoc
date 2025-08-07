@@ -10,6 +10,10 @@ import SummaryGenerator from '@/app/components/SummaryGenerator';
 import { ErrorBoundary } from 'react-error-boundary';
 // import Link from "next/link";
 import { generateSummaryPDF } from '@/app/generatePdf';
+import useUser from '@/app/hook/useUser';
+import { checkTranscriptionLimit, recordTranscriptionUsage } from '@/app/lib/transcriptionUtils';
+
+
 
 const AudioPlayer = ({ audioBlob }: { audioBlob: Blob }) => {
   const [isPlaying, setIsPlaying] = useState(false);
@@ -91,7 +95,12 @@ const WaveformVisualizer = ({ isPlaying }: { isPlaying: boolean }) => {
 
 
 export default function TranscribePage() {
-
+  const { data: user, isLoading: isUserLoading } = useUser();
+  const [transcriptionLimit, setTranscriptionLimit] = useState({
+    canTranscribe: false, // Start as false
+    message: 'Loading subscription...',
+    remainingMinutes: 0
+  });
   const [duration, setDuration] = useState<string | null>(null);
   // const [transcript, setTranscript] = useState<string | null>(null);
   const [isSummaryModalOpen, setIsSummaryModalOpen] = useState(false);
@@ -181,38 +190,254 @@ export default function TranscribePage() {
     return grouped;
   };
 
-  const handleTranscription = async () => {
-    if (!audioBlob) return;
+  // useEffect(() => {
+  //   if (user?.id) {
+  //     checkTranscriptionLimit(user.id).then(setTranscriptionLimit);
+  //   }
+  // }, [user]);
 
+  useEffect(() => {
+    const checkSubscriptionStatus = async () => {
+      if (!user?.id) return;
+
+      try {
+        const response = await fetch('/api/user/subscription-status');
+        
+        if (response.ok) {
+          const data = await response.json();
+          setTranscriptionLimit({
+            canTranscribe: data.canTranscribe,
+            message: data.canTranscribe 
+              ? `You have ${data.remainingMinutes} minutes remaining`
+              : 'No transcription minutes available in your plan',
+            remainingMinutes: data.remainingMinutes
+          });
+        } else if (response.status === 403) {
+          // No active subscription
+          setTranscriptionLimit({
+            canTranscribe: false,
+            message: 'Please subscribe to transcribe audio',
+            remainingMinutes: 0
+          });
+        } else {
+          // Error
+          setTranscriptionLimit({
+            canTranscribe: false,
+            message: 'Error checking subscription',
+            remainingMinutes: 0
+          });
+        }
+      } catch (error) {
+        console.error('Error checking subscription:', error);
+        setTranscriptionLimit({
+          canTranscribe: false,
+          message: 'Error checking subscription',
+          remainingMinutes: 0
+        });
+      }
+    };
+
+    checkSubscriptionStatus();
+  }, [user]);
+
+  // const handleTranscription = async () => {
+  //   if (!audioBlob || !user?.id) return;
+  
+  //   try {
+  //     // Check subscription status before transcription
+  //     const response = await fetch('/api/user/subscription-status');
+  //     if (!response.ok) {
+  //       setError('Unable to verify subscription status');
+  //       return;
+  //     }
+  
+  //     const subscriptionData = await response.json();
+  //     if (!subscriptionData.canTranscribe) {
+  //       setError(subscriptionData.message || 'No transcription minutes available');
+  //       return;
+  //     }
+  
+  //     // Check if user has enough minutes for this audio
+  //     if (duration) {
+  //       const durationMinutes = parseFloat(duration.split(':')[0]) + 
+  //         parseFloat(duration.split(':')[1]) / 60;
+        
+  //       if (durationMinutes > subscriptionData.remainingMinutes) {
+  //         setError(`Audio duration (${durationMinutes.toFixed(1)} min) exceeds your remaining minutes (${subscriptionData.remainingMinutes} min)`);
+  //         return;
+  //       }
+  //     }
+  
+  //     setIsTranscribing(true);
+  //     setError(null);
+  
+  //     const audioFile = new File([audioBlob], "audio.mp3", { type: "audio/mpeg" });
+  //     const formData = new FormData();
+  //     formData.append("file", audioFile);
+  
+  //     const transcribeResponse = await fetch("/api/transcribe", {
+  //       method: "POST",
+  //       body: formData,
+  //     });
+  
+  //     if (!transcribeResponse.ok) {
+  //       const errorData = await transcribeResponse.json();
+  //       throw new Error(errorData.error || 'Transcription failed');
+  //     }
+  
+  //     const { segments, text } = await transcribeResponse.json();
+  //     setSegments(segments);
+  //     setTranscript(text);
+  
+  //     // Record usage and update limits
+  //     if (duration) {
+  //       const durationMinutes = parseFloat(duration.split(':')[0]) + 
+  //         parseFloat(duration.split(':')[1]) / 60;
+  //       await recordTranscriptionUsage(user.id, durationMinutes);
+        
+  //       // Refresh subscription status
+  //       const updatedResponse = await fetch('/api/user/subscription-status');
+  //       if (updatedResponse.ok) {
+  //         const updatedData = await updatedResponse.json();
+  //         setTranscriptionLimit({
+  //           canTranscribe: updatedData.canTranscribe,
+  //           message: updatedData.canTranscribe 
+  //             ? `You have ${updatedData.remainingMinutes} minutes remaining`
+  //             : 'No transcription minutes available in your plan',
+  //           remainingMinutes: updatedData.remainingMinutes
+  //         });
+  //       }
+  //     }
+  //   } catch (err) {
+  //     const error = err as Error;
+  //     console.error('Transcription error:', error);
+  //     setError(error.message || 'Transcription failed. Please try again.');
+  //   } finally {
+  //     setIsTranscribing(false);
+  //   }
+  // };
+
+
+  const handleTranscription = async () => {
+    if (!audioBlob || !user?.id) return;
+  
     try {
+      console.log("=== Starting transcription process ===");
+      console.log("Audio blob size:", audioBlob.size);
+      console.log("Duration:", duration);
+  
+      // Check subscription status before transcription
+      const response = await fetch('/api/user/subscription-status');
+      if (!response.ok) {
+        setError('Unable to verify subscription status');
+        return;
+      }
+  
+      const subscriptionData = await response.json();
+      console.log("Subscription data:", subscriptionData);
+  
+      if (!subscriptionData.canTranscribe) {
+        setError(subscriptionData.message || 'No transcription minutes available');
+        return;
+      }
+  
+      // Check if user has enough minutes for this audio
+      if (duration) {
+        const durationMinutes = parseFloat(duration.split(':')[0]) + 
+          parseFloat(duration.split(':')[1]) / 60;
+        
+        console.log("Audio duration in minutes:", durationMinutes);
+        console.log("Remaining minutes:", subscriptionData.remainingMinutes);
+        
+        if (durationMinutes > subscriptionData.remainingMinutes) {
+          setError(`Audio duration (${durationMinutes.toFixed(1)} min) exceeds your remaining minutes (${subscriptionData.remainingMinutes} min)`);
+          return;
+        }
+      }
+  
       setIsTranscribing(true);
       setError(null);
-
+  
       const audioFile = new File([audioBlob], "audio.mp3", { type: "audio/mpeg" });
+      console.log("Created audio file:", audioFile.name, "Size:", audioFile.size, "Type:", audioFile.type);
+  
       const formData = new FormData();
       formData.append("file", audioFile);
-
-      const response = await fetch("/api/transcribe", {
+  
+      console.log("🚀 Sending transcription request...");
+      const transcribeResponse = await fetch("/api/transcribe", {
         method: "POST",
         body: formData,
       });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Transcription failed');
+  
+      console.log("Response status:", transcribeResponse.status);
+      console.log("Response headers:", Object.fromEntries(transcribeResponse.headers.entries()));
+  
+      if (!transcribeResponse.ok) {
+        let errorMessage = 'Transcription failed';
+        try {
+          const errorData = await transcribeResponse.json();
+          console.log("Error data:", errorData);
+          errorMessage = errorData.error || errorMessage;
+        } catch (parseError) {
+          console.log("Failed to parse error response:", parseError);
+          if (transcribeResponse.status === 500) {
+            errorMessage = 'Connection error. Please check your internet and try again.';
+          } else if (transcribeResponse.status === 413) {
+            errorMessage = 'File too large. Please use a smaller audio file.';
+          } else if (transcribeResponse.status === 400) {
+            errorMessage = 'Invalid file format. Please use MP3, WAV, or M4A.';
+          }
+        }
+        throw new Error(errorMessage);
       }
-
-      const { segments, text } = await response.json();
-      setSegments(segments); // Now properly used
-      setTranscript(text);
+  
+      const responseData = await transcribeResponse.json();
+      console.log("✅ Transcription successful");
+      console.log("Text length:", responseData.text?.length || 0);
+      console.log("Segments count:", responseData.segments?.length || 0);
+  
+      setSegments(responseData.segments);
+      setTranscript(responseData.text);
+  
+      // Record usage and update limits
+      if (duration) {
+        const durationMinutes = parseFloat(duration.split(':')[0]) + 
+          parseFloat(duration.split(':')[1]) / 60;
+        await recordTranscriptionUsage(user.id, durationMinutes);
+        
+        // Refresh subscription status
+        const updatedResponse = await fetch('/api/user/subscription-status');
+        if (updatedResponse.ok) {
+          const updatedData = await updatedResponse.json();
+          setTranscriptionLimit({
+            canTranscribe: updatedData.canTranscribe,
+            message: updatedData.canTranscribe 
+              ? `You have ${updatedData.remainingMinutes} minutes remaining`
+              : 'No transcription minutes available in your plan',
+            remainingMinutes: updatedData.remainingMinutes
+          });
+        }
+      }
     } catch (err) {
       const error = err as Error;
-      console.error('Transcription error:', error);
-      setError(error.message || 'Transcription failed. Please try again.');
+      console.error('❌ Transcription error:', error);
+      
+      let userFriendlyMessage = error.message;
+      if (error.message.includes('Connection error')) {
+        userFriendlyMessage = 'Network connection failed. Please check your internet and try again.';
+      } else if (error.message.includes('timeout')) {
+        userFriendlyMessage = 'Request timed out. Please try with a shorter audio file.';
+      } else if (error.message.includes('API key')) {
+        userFriendlyMessage = 'Service temporarily unavailable. Please try again later.';
+      }
+      
+      setError(userFriendlyMessage);
     } finally {
       setIsTranscribing(false);
     }
   };
+
 
   const formatAudioDuration = (audioBlob: Blob) => {
     const url = URL.createObjectURL(audioBlob);
@@ -266,6 +491,11 @@ export default function TranscribePage() {
     setSegments(null);    // Clear segments
     setSummary('');
   };
+
+    // Show loading state while user data is being fetched
+    if (isUserLoading) {
+      return <div>Loading...</div>;
+    }
 
   return (
     <div className="container mx-auto px-4 py-10 max-w-4xl">
@@ -547,7 +777,7 @@ export default function TranscribePage() {
                 >
                   <button
                     onClick={handleTranscription}
-                    disabled={isTranscribing}
+                    disabled={isTranscribing || !transcriptionLimit.canTranscribe}
                     className="w-full py-3 px-6 
                               bg-gradient-to-r from-cyan-400 to-gray-900 
                               dark:from-cyan-500 dark:to-gray-800
@@ -563,10 +793,14 @@ export default function TranscribePage() {
                         <Loader2 className="h-5 w-5 animate-spin" />
                         <span>Transcribing Audio...</span>
                       </>
+                    ) : !transcriptionLimit.canTranscribe ? (
+                      <>
+                        <span>{transcriptionLimit.message}</span>
+                      </>
                     ) : (
                       <>
                         <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="0.8571428571428571" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-captions"><rect width="18" height="14" x="3" y="5" rx="2" ry="2" /><path d="M7 15h4M15 15h2M7 11h2M13 11h4" /></svg>
-                        <span>Transcribe Audio</span>
+                        <span>Transcribe Audio ({transcriptionLimit.remainingMinutes.toFixed(1)} mins remaining)</span>
                       </>
                     )}
                   </button>

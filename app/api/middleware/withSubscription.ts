@@ -28,7 +28,11 @@ export async function withSubscription(
 
   const { data: subscription, error: subscriptionError } = await supabase
     .from('subscriptions')
-    .select('*, subscription_plans(*)')
+    // .select('*, subscription_plans(*)')
+    .select(`
+      *,
+      subscription_plans!plan_id(*)
+    `)
     .eq('user_id', user.id)
     .eq('status', 'active')
     .lte('starts_at', new Date().toISOString())
