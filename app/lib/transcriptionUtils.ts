@@ -1,171 +1,133 @@
-// app/lib/transcriptionUtils.ts
-import { createClient } from '@supabase/supabase-js';
+import type { SupabaseClient } from '@supabase/supabase-js';
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-);
+function assertIsSupabaseClient(x: any): asserts x is SupabaseClient {
+  if (!x || typeof x.auth?.getUser !== 'function') {
+    throw new Error('checkTranscriptionLimit: first arg must be a SupabaseClient');
+  }
+}
 
-// export async function checkTranscriptionLimit(userId: string) {
-//   console.log('Checking subscription for user:', userId);
-//   try {
-//     // const { data: allSubs, error: allSubsError } = await supabase
-//     //   .from('subscriptions')
-//     //   .select('*')
-//     //   .eq('user_id', userId);
+export async function checkTranscriptionLimit(supabase: SupabaseClient, userId: string) {
+  assertIsSupabaseClient(supabase);
+  console.log('Checking transcription limits for user:', userId);
 
-//     // console.log('All subscriptions for user:', allSubs);
-//     // console.log('All subscriptions error:', allSubsError);
+  const now = new Date();
+  const formatDateForPG = (d: Date) => d.toISOString().replace(/\.\d{3}Z$/, 'Z');
+  const nowISO = formatDateForPG(now);
 
-//     // // Then check with status
-//     // const { data: activeSubs, error: activeSubsError } = await supabase
-//     //   .from('subscriptions')
-//     //   .select('*')
-//     //   .eq('user_id', userId)
-//     //   .eq('status', 'active');
+  const { data: { user } } = await supabase.auth.getUser();
+  console.log('session uid:', user?.id); // should now be defined
 
-//     // console.log('Active subscriptions:', activeSubs);
-//     // console.log('Active subscriptions error:', activeSubsError);
+  const { data: subscriptions, error: subError } = await supabase
+    .from('subscriptions')
+    .select(`*, subscription_plans!inner(*)`)
+    .eq('user_id', userId)
+    .eq('status', 'active')
+    .lte('starts_at', nowISO)
+    .or(`ends_at.is.null,ends_at.gte.${nowISO}`)
+    .order('starts_at', { ascending: false })
+    .limit(1);
 
-//     const currentTime = new Date().toISOString();
-//     console.log('Current time:', currentTime);
+  if (subError) throw subError;
 
-//   //   // Simplified query to match SQL that works
-//   //   const { data, error } = await supabase
-//   //   .from('subscriptions')
-//   //   .select('*, subscription_plans(*)')
-//   //   .eq('user_id', userId)
-//   //   .eq('status', 'active')
-//   //   .lte('starts_at', currentTime)
-//   // .or(`ends_at.gte.${currentTime},ends_at.is.null`) 
-//   //   .order('created_at', { ascending: false })
-//   //   .limit(1);
+  const subscription = subscriptions?.[0] || null;
+  const plan = subscription?.subscription_plans;
 
-//   // Replace the existing query with this corrected version
-//     const { data, error } = await supabase
-//     .from('subscriptions')
-//     .select(`
-//       *,
-//       subscription_plans!plan_id(*) 
-//     `) // Force inner join using "!inner" and specify FK
-//     .eq('user_id', userId)
-//     .eq('status', 'active')
-//     // .lte('starts_at', 'now()') // Database NOW()
-//     // .gte('ends_at', 'now()')   // Database NOW()
-//     .order('created_at', { ascending: false })
-//     .limit(1);
+  if (!subscription || !plan) {
+    return {
+      canTranscribe: false,
+      message: 'No active subscription found. Please subscribe to transcribe audio.',
+      remainingMinutes: 0, planLimit: 0, usedMinutes: 0, billingInterval: null
+    };
+  }
 
-//     console.log('Final subscription query result:', data);
+  if (plan.transcription_mins === 0) {
+    return {
+      canTranscribe: false,
+      message: 'Your current plan does not include transcription minutes. Please upgrade your plan.',
+      remainingMinutes: 0, planLimit: 0, usedMinutes: 0, billingInterval: plan.billing_interval
+    };
+  }
 
-//     if (error || !data?.length) {
-//       return { 
-//         canTranscribe: false, 
-//         message: 'No active subscription', 
-//         remainingMinutes: 0 
-//       };
-//     }
+  const periodStart = plan.billing_interval === 'month'
+    ? new Date(now.getFullYear(), now.getMonth(), 1)
+    : new Date(now.getFullYear(), 0, 1);
+  const periodStartISO = formatDateForPG(periodStart);
 
-   
+  const { data: usage, error: usageError } = await supabase
+    .from('transcription_usage')
+    .select('duration_minutes')
+    .eq('user_id', userId)
+    .gte('created_at', periodStartISO)
+    .lte('created_at', nowISO);
 
-//     if (!data || data.length === 0) {
-//       return {
-//         canTranscribe: false,
-//         message: 'Please subscribe to transcribe audio',
-//         remainingMinutes: 0
-//       };
-//     }
+  if (usageError) throw usageError;
 
-//     const subscription = data[0];
-//     const plan = subscription.subscription_plans[0];
+  const usedMinutes = usage?.reduce((s, r) => s + r.duration_minutes, 0) || 0;
+  const remainingMinutes = Math.max(0, plan.transcription_mins - usedMinutes);
 
-//     if (!plan) {
-//       console.error('No plan found for subscription:', subscription);
-//       return {
-//         canTranscribe: false,
-//         message: 'Invalid subscription plan',
-//         remainingMinutes: 0
-//       };
-//     }
-
-//     // Calculate usage period
-//     const now = new Date();
-//     const periodStart = plan.billing_interval === 'month' 
-//       ? new Date(now.getFullYear(), now.getMonth(), 1)
-//       : new Date(now.getFullYear(), 0, 1);
-
-//     // Get usage for current period
-//     const { data: usage, error: usageError } = await supabase
-//       .from('transcription_usage')
-//       .select('duration_minutes')
-//       .eq('user_id', userId)
-//       .gte('month_year', periodStart.toISOString())
-//       .lte('month_year', now.toISOString());
-
-//     if (usageError) {
-//       console.error('Error fetching usage:', usageError);
-//       return {
-//         canTranscribe: false,
-//         message: 'Error checking usage',
-//         remainingMinutes: 0
-//       };
-//     }
-
-//     const totalUsage = usage?.reduce((sum, record) => sum + record.duration_minutes, 0) || 0;
-//     const limit = plan.transcription_mins;
-
-//     console.log('Usage details:', {
-//       totalUsage,
-//       limit,
-//       periodStart: periodStart.toISOString(),
-//       now: now.toISOString()
-//     });
-
-//     return {
-//       canTranscribe: totalUsage < limit,
-//       message: totalUsage >= limit 
-//         ? `You've reached your ${plan.billing_interval}ly limit of ${limit} minutes`
-//         : `You have ${limit - totalUsage} minutes remaining`,
-//       remainingMinutes: limit - totalUsage
-//     };
-
-//   } catch (error) {
-//     console.error('Error in checkTranscriptionLimit:', error);
-//     return {
-//       canTranscribe: false,
-//       message: 'Error checking transcription limit',
-//       remainingMinutes: 0
-//     };
-//   }
-// }
-export async function checkTranscriptionLimit(userId: string) {
-  console.log('Checking subscription for user:', userId);
-  
-  // Always allow transcription - removed all subscription checks
   return {
-    canTranscribe: true,
-    message: 'Transcription enabled',
-    remainingMinutes: 999 // Set a high number to show unlimited
+    canTranscribe: remainingMinutes > 0,
+    message: remainingMinutes > 0
+      ? `You have ${remainingMinutes.toFixed(1)} minutes remaining`
+      : `You've reached your ${plan.billing_interval}ly limit of ${plan.transcription_mins} minutes`,
+    remainingMinutes,
+    planLimit: plan.transcription_mins,
+    usedMinutes,
+    billingInterval: plan.billing_interval
   };
 }
-export async function recordTranscriptionUsage(userId: string, durationMinutes: number) {
-  // try {
-  //   const now = new Date();
-  //   const monthYear = new Date(now.getFullYear(), now.getMonth(), 1);
 
-  //   const { error } = await supabase
-  //     .from('transcription_usage')
-  //     .insert({
-  //       user_id: userId,
-  //       duration_minutes: durationMinutes,
-  //       month_year: monthYear
-  //     });
+export async function validateTranscriptionRequest(
+  supabase: SupabaseClient,
+  userId: string,
+  audioDurationMinutes: number
+) {
+  assertIsSupabaseClient(supabase);
+  const limitCheck = await checkTranscriptionLimit(supabase, userId);
+  if (!limitCheck.canTranscribe) {
+    return {
+      canProceed: false,
+      error: limitCheck.message,
+      suggestion: limitCheck.planLimit === 0
+        ? 'Please subscribe to a plan with transcription minutes.'
+        : 'Please upgrade your plan or wait for your next billing cycle.',
+    };
+  }
 
-  //   if (error) {
-  //     console.error('Error recording transcription usage:', error);
-  //     throw error;
-  //   }
-  // } catch (error) {
-  //   console.error('Error in recordTranscriptionUsage:', error);
-  //   throw error;
-  // }
+  if (audioDurationMinutes > limitCheck.remainingMinutes) {
+    return {
+      canProceed: false,
+      error: `Audio duration (${audioDurationMinutes.toFixed(1)} min) exceeds your remaining minutes (${limitCheck.remainingMinutes.toFixed(1)} min)`,
+      suggestion: `Try uploading a shorter audio file (max ${limitCheck.remainingMinutes.toFixed(1)} minutes) or upgrade your plan.`,
+    };
+  }
+
+  const usagePercentage = (audioDurationMinutes / limitCheck.remainingMinutes) * 100;
+  const warning = usagePercentage > 80 ? `This will use ${usagePercentage.toFixed(0)}% of your remaining minutes.` : null;
+
+  return { canProceed: true, warning, remainingAfterUse: limitCheck.remainingMinutes - audioDurationMinutes };
+}
+
+export async function recordTranscriptionUsage(
+  supabase: SupabaseClient,
+  userId: string,
+  durationMinutes: number
+) {
+  assertIsSupabaseClient(supabase);
+  const now = new Date();
+  const { data: usageRecord, error: insertError } = await supabase
+    .from('transcription_usage')
+    .insert({ user_id: userId, duration_minutes: durationMinutes, created_at: now.toISOString() })
+    .select()
+    .single();
+
+  if (insertError) throw insertError;
+
+  const updatedLimits = await checkTranscriptionLimit(supabase, userId);
+  return { success: true, usageRecord, updatedLimits };
+}
+
+export function parseAudioDuration(durationString: string): number {
+  const [m = '0', s = '0'] = durationString.split(':');
+  return (parseInt(m) || 0) + (parseInt(s) || 0) / 60;
 }

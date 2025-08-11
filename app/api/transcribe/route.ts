@@ -40,7 +40,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    console.log("🚀 Starting OpenAI transcription...");
+    // console.log("🚀 Starting OpenAI transcription...");
 
     try {
       const transcription = await openai.audio.transcriptions.create({
@@ -52,9 +52,9 @@ export async function POST(req: NextRequest) {
         timeout: 120000 // 2 minutes
       });
 
-      console.log("✅ Transcription successful");
-      console.log("📝 Text length:", transcription.text?.length || 0);
-      console.log("📊 Segments count:", transcription.segments?.length || 0);
+      // console.log("✅ Transcription successful");
+      // console.log("📝 Text length:", transcription.text?.length || 0);
+      // console.log("📊 Segments count:", transcription.segments?.length || 0);
 
       return NextResponse.json({
         text: transcription.text,
