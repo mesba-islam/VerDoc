@@ -54,7 +54,7 @@ export async function checkTranscriptionLimit(
   if (!sub) {
     return {
       canTranscribe: false,
-      message: "No active subscription found. Please subscribe to transcribe audio.",
+      message: "Subscribe to transcribe",
       remainingMinutes: 0,
       planLimit: 0,
       usedMinutes: 0,

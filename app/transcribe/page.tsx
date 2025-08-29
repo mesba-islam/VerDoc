@@ -578,7 +578,7 @@ export default function TranscribePage() {
                       !transcriptionLimit.canTranscribe ||
                       (!!duration && parseAudioDuration(duration) > transcriptionLimit.remainingMinutes)
                     }
-                    className="w-full py-3 px-6 
+                    className="w-lg py-3 px-6 
                     bg-gradient-to-r from-cyan-400 to-gray-900 
                     dark:from-cyan-500 dark:to-gray-800
                     hover:from-cyan-300 hover:to-gray-700 
@@ -586,7 +586,7 @@ export default function TranscribePage() {
                     text-white rounded-lg font-semibold 
                     transition-all duration-300 ease-in-out shadow-lg 
                     hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed
-                    flex items-center justify-center gap-2"
+                    flex items-center justify-center gap-2 mx-auto"
                   >
                     {isTranscribing ? (
                       <>

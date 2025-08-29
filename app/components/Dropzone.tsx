@@ -3,9 +3,8 @@
 import { useState, useCallback, useEffect } from "react";
 import { AudioWaveform, Crown, CheckCircle, XCircle } from "lucide-react";
 import { useDropzone } from "react-dropzone";
-// import { AudioWaveform } from "lucide-react";
-import { useFileStore } from "../store"; // Import Zustand store
-import { useRouter } from "next/navigation"; // For navigation
+import { useFileStore } from "../store";
+import { useRouter } from "next/navigation";
 
 type PlanDetails = {
   name: string;
@@ -15,6 +14,12 @@ type PlanDetails = {
   billing_interval: string | null;
 };
 
+// NEW: mirrors the Transcribe page type
+type LimitResponse = {
+  canTranscribe: boolean;
+  message: string;
+  remainingMinutes: number;
+};
 
 export default function Dropzone() {
   const [uploadLimit, setUploadLimit] = useState<number | null>(null);
@@ -22,107 +27,86 @@ export default function Dropzone() {
   const [uploading, setUploading] = useState(false);
   const [planDetails, setPlanDetails] = useState<PlanDetails | null>(null);
   const [isLoadingPlan, setIsLoadingPlan] = useState(true);
-  const setFile = useFileStore((state) => state.setFile); // Zustand store function
-  const router = useRouter(); // Router for navigation
 
-  // useEffect(() => {
-  //   const fetchLimit = async () => {
-  //     const res = await fetch("/api/user/plan");
-  //     if (res.ok) {
-  //       const data = await res.json();
-  //       setUploadLimit(data.plan.upload_limit_mb);
-  //     }
-  //   };
-  //   fetchLimit();
-  // }, []);
+  // NEW: remaining minutes from /api/transcription/limits
+  const [remainingMinutes, setRemainingMinutes] = useState<number | null>(null);
+
+  const setFile = useFileStore((state) => state.setFile);
+  const router = useRouter();
 
   useEffect(() => {
-  //   const fetchLimit = async () => {
-  //     try {
-  //       const res = await fetch("/api/user/plan");
-  
-  //       if (res.ok) {
-  //         const data = await res.json();
-  //         const limit = data?.plan?.upload_limit_mb;
-  
-  //         if (typeof limit === "number") {
-  //           setUploadLimit(limit);
-  //         } else {
-  //           // If plan exists but limit is not a number
-  //           setUploadLimit(50);
-  //         }
-  //       } else if (res.status === 403) {
-  //         // Logged in but no active subscription
-  //         setUploadLimit(50);
-  //       } else {
-  //         // Not authorized or some other issue
-  //         setUploadLimit(null);
-  //       }
-  //     } catch (error) {
-  //       console.error("Failed to fetch plan:", error);
-  //       setUploadLimit(null);
-  //     }
-  //   };
-  
-  //   fetchLimit();
-  // }, []);
-  
-  const fetchPlanDetails = async () => {
-    try {
-      setIsLoadingPlan(true);
-      const res = await fetch("/api/user/plan");
+    const fetchPlanAndLimits = async () => {
+      try {
+        setIsLoadingPlan(true);
 
-      if (res.ok) {
-        const data = await res.json();
-        const plan = data?.plan;
-        
-        if (plan) {
-          setPlanDetails(plan);
-          setUploadLimit(plan.upload_limit_mb);
-        } else {
-          // Fallback for users without active subscription
+        const [planRes, limitsRes] = await Promise.all([
+          fetch("/api/user/plan", { credentials: "include" }),
+          fetch("/api/transcription/limits", { credentials: "include" }),
+        ]);
+
+        // Plan details
+        if (planRes.ok) {
+          const data = await planRes.json();
+          const plan = data?.plan;
+
+          if (plan) {
+            setPlanDetails(plan);
+            setUploadLimit(plan.upload_limit_mb);
+          } else {
+            // No active subscription → fallback Free Plan
+            setPlanDetails({
+              name: "Free Plan",
+              upload_limit_mb: 50,
+              transcription_mins: 0,
+              summarization_limit: 0,
+              billing_interval: null,
+            });
+            setUploadLimit(50);
+          }
+        } else if (planRes.status === 403) {
+          // No active subscription
           setPlanDetails({
             name: "Free Plan",
             upload_limit_mb: 50,
             transcription_mins: 0,
             summarization_limit: 0,
-            billing_interval: null
+            billing_interval: null,
           });
           setUploadLimit(50);
+        } else {
+          setPlanDetails(null);
+          setUploadLimit(null);
         }
-      } else if (res.status === 403) {
-        // No active subscription
-        setPlanDetails({
-          name: "Free Plan",
-          upload_limit_mb: 50,
-          transcription_mins: 0,
-          summarization_limit: 0,
-          billing_interval: null
-        });
-        setUploadLimit(50);
-      } else {
-        // Error or unauthorized
+
+        // Limits (remaining minutes)
+        if (limitsRes.ok) {
+          const lim: LimitResponse = await limitsRes.json();
+          setRemainingMinutes(lim.remainingMinutes);
+        } else if (limitsRes.status === 401 || limitsRes.status === 403) {
+          // Not signed in or no subscription → treat as 0 mins remaining
+          setRemainingMinutes(0);
+        } else {
+          setRemainingMinutes(null); // unknown
+        }
+      } catch (err) {
+        console.error("Failed to fetch plan/limits:", err);
         setPlanDetails(null);
         setUploadLimit(null);
+        setRemainingMinutes(null);
+      } finally {
+        setIsLoadingPlan(false);
       }
-    } catch (error) {
-      console.error("Failed to fetch plan:", error);
-      setPlanDetails(null);
-      setUploadLimit(null);
-    } finally {
-      setIsLoadingPlan(false);
-    }
-  };
+    };
 
-  fetchPlanDetails();
-}, []);
+    fetchPlanAndLimits();
+  }, []);
 
   const onDrop = useCallback(
     (acceptedFiles: File[]) => {
       if (acceptedFiles.length === 0 || uploadLimit === null) return;
 
       const file = acceptedFiles[0];
-      const fileSizeMB = file.size / (1024 * 1024); // Convert to MB
+      const fileSizeMB = file.size / (1024 * 1024);
 
       if (fileSizeMB > uploadLimit) {
         alert(`File size exceeds your plan's upload limit of ${uploadLimit}MB.`);
@@ -149,11 +133,8 @@ export default function Dropzone() {
     }, 300);
   };
 
-  
   const { getRootProps, getInputProps, isDragActive } = useDropzone({ onDrop });
 
-
-  // Plan details display component
   const PlanInfo = () => {
     if (isLoadingPlan) {
       return (
@@ -165,7 +146,7 @@ export default function Dropzone() {
         </div>
       );
     }
-  
+
     if (!planDetails) {
       return (
         <div className="mb-4 p-3 bg-red-900/20 border border-red-700/50 rounded-lg">
@@ -176,7 +157,7 @@ export default function Dropzone() {
         </div>
       );
     }
-  
+
     return (
       <div className="mb-4 p-4 bg-gradient-to-r from-gray-800/50 to-gray-900/50 border border-gray-600/50 rounded-lg backdrop-blur-sm">
         <div className="flex items-center justify-between mb-3">
@@ -186,9 +167,7 @@ export default function Dropzone() {
             ) : (
               <Crown className="w-5 h-5 text-yellow-400" />
             )}
-            <h3 className="font-semibold text-gray-200">
-              {planDetails.name}
-            </h3>
+            <h3 className="font-semibold text-gray-200">{planDetails.name}</h3>
           </div>
           {planDetails.billing_interval && (
             <span className="text-xs bg-cyan-900/50 text-cyan-300 px-2 py-1 rounded-full border border-cyan-700/50">
@@ -196,7 +175,7 @@ export default function Dropzone() {
             </span>
           )}
         </div>
-  
+
         <div className="grid grid-cols-1 gap-2 text-sm">
           <div className="flex items-center justify-between">
             <span className="text-gray-400">Upload Limit:</span>
@@ -204,30 +183,45 @@ export default function Dropzone() {
               {planDetails.upload_limit_mb}MB
             </span>
           </div>
-          
+
           <div className="flex items-center justify-between">
-            <span className="text-gray-400">Transcription:</span>
+            <span className="text-gray-400">Transcription Limit:</span>
             <span className="font-medium text-gray-200">
-              {planDetails.transcription_mins > 0 
+              {planDetails.transcription_mins > 0
                 ? `${planDetails.transcription_mins} mins`
-                : "Not available"
-              }
+                : "Not available"}
             </span>
           </div>
-          
+
+          {/* NEW: Remaining minutes (from /api/transcription/limits) */}
+          {/* <div className="flex items-center justify-between">
+            <span className="text-gray-400">Remaining Times:</span>
+            <span className="font-medium text-gray-200">
+              {remainingMinutes == null ? "—" : `${remainingMinutes.toFixed(1)} mins`}
+            </span>
+          </div> */}
+
+          {remainingMinutes != null && remainingMinutes > 0 && (
+            <div className="flex items-center justify-between">
+              <span className="text-gray-400">Remaining Times:</span>
+              <span className="font-medium text-gray-200">
+                {remainingMinutes.toFixed(1)} mins
+              </span>
+            </div>
+          )}
+
           <div className="flex items-center justify-between">
             <span className="text-gray-400">Summaries:</span>
             <span className="font-medium text-gray-200">
-              {planDetails.summarization_limit === null 
+              {planDetails.summarization_limit === null
                 ? "Unlimited"
-                : planDetails.summarization_limit > 0 
-                  ? `${planDetails.summarization_limit} PDFs`
-                  : "Not available"
-              }
+                : planDetails.summarization_limit > 0
+                ? `${planDetails.summarization_limit} PDFs`
+                : "Not available"}
             </span>
           </div>
         </div>
-  
+
         {planDetails.name === "Free Plan" && (
           <div className="mt-3 p-2 bg-yellow-900/20 border border-yellow-700/50 rounded">
             <div className="flex items-center gap-2 text-yellow-400 text-xs">
@@ -241,11 +235,9 @@ export default function Dropzone() {
   };
 
   return (
-<div className="space-y-4">
-      {/* Plan Details Display */}
+    <div className="space-y-4">
       <PlanInfo />
 
-      {/* Dropzone */}
       <div
         {...getRootProps()}
         className={`border-2 border-dashed p-10 rounded-lg text-center cursor-pointer transition flex flex-col items-center justify-center gap-4 w-96 h-48 ${
