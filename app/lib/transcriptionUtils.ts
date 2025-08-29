@@ -1,81 +1,137 @@
-import type { SupabaseClient } from '@supabase/supabase-js';
+import type { SupabaseClient } from "@supabase/supabase-js";
 
-function assertIsSupabaseClient(x: any): asserts x is SupabaseClient {
-  if (!x || typeof x.auth?.getUser !== 'function') {
-    throw new Error('checkTranscriptionLimit: first arg must be a SupabaseClient');
-  }
+function assertIsSupabaseClient(x: unknown): asserts x is SupabaseClient {
+  const ok = !!x && typeof (x as SupabaseClient).auth?.getUser === "function";
+  if (!ok) throw new Error("checkTranscriptionLimit: first arg must be a SupabaseClient");
 }
 
-export async function checkTranscriptionLimit(supabase: SupabaseClient, userId: string) {
+type LimitResult = {
+  canTranscribe: boolean;
+  message: string;
+  remainingMinutes: number;
+  planLimit: number;
+  usedMinutes: number;
+  billingInterval: string | null;
+  periodStart?: string;
+  periodEnd?: string;
+};
+
+type SubscriptionRow = {
+  id: string;
+  user_id: string;
+  plan_id: string;
+  status: string;
+  starts_at: string;
+  ends_at: string | null;
+};
+
+type PlanRow = {
+  id: string;
+  transcription_mins: number | string;
+  billing_interval: string | null;
+};
+
+export async function checkTranscriptionLimit(
+  supabase: SupabaseClient,
+  userId: string
+): Promise<LimitResult> {
   assertIsSupabaseClient(supabase);
-  console.log('Checking transcription limits for user:', userId);
+  const nowISO = new Date().toISOString();
 
-  const now = new Date();
-  const formatDateForPG = (d: Date) => d.toISOString().replace(/\.\d{3}Z$/, 'Z');
-  const nowISO = formatDateForPG(now);
+  // 1) Get active/trialing subscription whose window includes now
+  const { data: sub, error: subErr } = await supabase
+    .from("subscriptions")
+    .select("id,user_id,plan_id,status,starts_at,ends_at")
+    .eq("user_id", userId)
+    .in("status", ["active"])          // include trials if used
+    .lte("starts_at", nowISO)
+    .or(`ends_at.is.null,ends_at.gte.${nowISO}`)   // ends_at NULL or >= now
+    .order("starts_at", { ascending: false })
+    .maybeSingle<SubscriptionRow>();
 
-  const { data: { user } } = await supabase.auth.getUser();
-  console.log('session uid:', user?.id); // should now be defined
+  if (subErr) throw subErr;
 
-  const { data: subscriptions, error: subError } = await supabase
-    .from('subscriptions')
-    .select(`*, subscription_plans!inner(*)`)
-    .eq('user_id', userId)
-    .eq('status', 'active')
-    .lte('starts_at', nowISO)
-    .or(`ends_at.is.null,ends_at.gte.${nowISO}`)
-    .order('starts_at', { ascending: false })
-    .limit(1);
-
-  if (subError) throw subError;
-
-  const subscription = subscriptions?.[0] || null;
-  const plan = subscription?.subscription_plans;
-
-  if (!subscription || !plan) {
+  if (!sub) {
     return {
       canTranscribe: false,
-      message: 'No active subscription found. Please subscribe to transcribe audio.',
-      remainingMinutes: 0, planLimit: 0, usedMinutes: 0, billingInterval: null
+      message: "No active subscription found. Please subscribe to transcribe audio.",
+      remainingMinutes: 0,
+      planLimit: 0,
+      usedMinutes: 0,
+      billingInterval: null,
     };
   }
 
-  if (plan.transcription_mins === 0) {
+  // 2) Fetch plan separately (avoid join headaches)
+  const { data: plan, error: planErr } = await supabase
+    .from("subscription_plans")
+    .select("id,transcription_mins,billing_interval")
+    .eq("id", sub.plan_id)
+    .maybeSingle<PlanRow>();
+
+  if (planErr) throw planErr;
+
+  if (!plan) {
     return {
       canTranscribe: false,
-      message: 'Your current plan does not include transcription minutes. Please upgrade your plan.',
-      remainingMinutes: 0, planLimit: 0, usedMinutes: 0, billingInterval: plan.billing_interval
+      message: "Your subscription is missing a plan. Please contact support.",
+      remainingMinutes: 0,
+      planLimit: 0,
+      usedMinutes: 0,
+      billingInterval: null,
+      periodStart: sub.starts_at,
+      periodEnd: sub.ends_at ?? undefined,
     };
   }
 
-  const periodStart = plan.billing_interval === 'month'
-    ? new Date(now.getFullYear(), now.getMonth(), 1)
-    : new Date(now.getFullYear(), 0, 1);
-  const periodStartISO = formatDateForPG(periodStart);
+  const planLimit = Number(plan.transcription_mins || 0);
+  if (!planLimit) {
+    return {
+      canTranscribe: false,
+      message: "Your current plan does not include transcription minutes. Please upgrade your plan.",
+      remainingMinutes: 0,
+      planLimit: 0,
+      usedMinutes: 0,
+      billingInterval: plan.billing_interval,
+      periodStart: sub.starts_at,
+      periodEnd: sub.ends_at ?? undefined,
+    };
+  }
 
-  const { data: usage, error: usageError } = await supabase
-    .from('transcription_usage')
-    .select('duration_minutes')
-    .eq('user_id', userId)
-    .gte('created_at', periodStartISO)
-    .lte('created_at', nowISO);
+  // 3) Sum usage inside the subscription window
+  type UsageRow = { duration_minutes: number | string };
+  const toEnd = sub.ends_at ?? nowISO; // if ends_at is NULL, cap at now
+  const { data: usage, error: usageErr } = await supabase
+    .from("transcription_usage")
+    .select("duration_minutes")
+    .eq("user_id", userId)
+    .gte("created_at", sub.starts_at)
+    .lt("created_at", toEnd);
 
-  if (usageError) throw usageError;
+  if (usageErr) throw usageErr;
 
-  const usedMinutes = usage?.reduce((s, r) => s + r.duration_minutes, 0) || 0;
-  const remainingMinutes = Math.max(0, plan.transcription_mins - usedMinutes);
+  const usedMinutes = ((usage ?? []) as UsageRow[]).reduce(
+    (sum, u) => sum + Number(u.duration_minutes ?? 0),
+    0
+  );
+
+  const remainingMinutes = Math.max(0, planLimit - usedMinutes);
 
   return {
     canTranscribe: remainingMinutes > 0,
-    message: remainingMinutes > 0
-      ? `You have ${remainingMinutes.toFixed(1)} minutes remaining`
-      : `You've reached your ${plan.billing_interval}ly limit of ${plan.transcription_mins} minutes`,
+    message:
+      remainingMinutes > 0
+        ? `You have ${remainingMinutes.toFixed(1)} minutes remaining`
+        : `You've reached your limit of ${planLimit} minutes for this period`,
     remainingMinutes,
-    planLimit: plan.transcription_mins,
+    planLimit,
     usedMinutes,
-    billingInterval: plan.billing_interval
+    billingInterval: plan.billing_interval,
+    periodStart: sub.starts_at,
+    periodEnd: sub.ends_at ?? undefined,
   };
 }
+
 
 export async function validateTranscriptionRequest(
   supabase: SupabaseClient,
