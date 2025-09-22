@@ -348,7 +348,7 @@ export default function TranscribePage() {
         {isSummaryModalOpen && (
           <motion.div
             initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[999] bg-black/50 dark:bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center "
+            className="fixed inset-0 z-[999] bg-black/50 dark:bg-black/80 backdrop-blur-sm  flex items-center justify-center "
           >
             <motion.div initial={{ scale: 0.95, y: 20 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.95, y: 20 }}
               className="w-full max-w-4xl bg-background text-foreground rounded-2xl shadow-xl relative overflow-hidden">
@@ -548,7 +548,7 @@ export default function TranscribePage() {
               {audioBlob && !transcript && (
                 <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="mb-6">
                   {duration && transcriptionLimit.remainingMinutes > 0 && (
-                    <div className="mb-3 p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-700 rounded-lg">
+                    <div className="mb-9 p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-700 rounded-lg">
                       <div className="flex items-center justify-between text-sm">
                         <span className="text-blue-700 dark:text-blue-300">Audio Duration: {duration}</span>
                         <span className="text-blue-700 dark:text-blue-300">
@@ -605,7 +605,7 @@ export default function TranscribePage() {
                           <rect width="18" height="14" x="3" y="5" rx="2" ry="2" />
                           <path d="M7 15h4M15 15h2M7 11h2M13 11h4" />
                         </svg>
-                        <span>Transcribe Audio ({transcriptionLimit.remainingMinutes.toFixed(1)} mins remaining)</span>
+                        <span>Transcribe Audio </span>
                       </>
                     )}
                   </button>

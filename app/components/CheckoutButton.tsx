@@ -3,7 +3,7 @@
 import { Paddle } from '@paddle/paddle-js';
 import { useRouter } from 'next/navigation';
 import useUser from '@/app/hook/useUser';
-
+import type { CheckoutOpenOptions } from '@paddle/paddle-js';
 declare global {
   interface Window {
     Paddle?: Paddle;
@@ -28,14 +28,29 @@ export function CheckoutButton({ priceId, isPaddleReady, price, isStarter = fals
     }
     if (!window.Paddle) return;
     
-    window.Paddle.Checkout.open({
+     // Detect current theme
+  const isDark = document.documentElement.classList.contains('dark') || 
+  window.matchMedia('(prefers-color-scheme: dark)').matches;
+
+    // Build options; prefill email if we have it
+    const options: CheckoutOpenOptions  = {
       items: [{ priceId, quantity: 1 }],
       customData: {
         user_id: user.id,
-        plan_id: planId, // You'll need to pass this to the CheckoutButton props
+        plan_id: planId,
       },
-    });
-    
+      settings: {
+        theme: isDark ? 'dark' : 'light',
+        // keep the email editable:
+        allowLogout: true,
+      },
+    };
+
+    if (user.email) {
+      options.customer = { email: user.email }; // prefill, but still editable
+    }
+
+    window.Paddle.Checkout.open(options);
   };
 
   return (
