@@ -33,7 +33,7 @@ export function CheckoutButton({ priceId, isPaddleReady, price, isStarter = fals
   window.matchMedia('(prefers-color-scheme: dark)').matches;
 
     // Build options; prefill email if we have it
-    const options: CheckoutOpenOptions  = {
+    const options = {
       items: [{ priceId, quantity: 1 }],
       customData: {
         user_id: user.id,
@@ -41,16 +41,12 @@ export function CheckoutButton({ priceId, isPaddleReady, price, isStarter = fals
       },
       settings: {
         theme: isDark ? 'dark' : 'light',
-        // keep the email editable:
         allowLogout: true,
       },
-    };
-
-    if (user.email) {
-      options.customer = { email: user.email }; // prefill, but still editable
-    }
-
-    window.Paddle.Checkout.open(options);
+      customer: user.email ? { email: user.email } : undefined,
+    } satisfies CheckoutOpenOptions;
+    
+    window.Paddle!.Checkout.open(options);
   };
 
   return (
