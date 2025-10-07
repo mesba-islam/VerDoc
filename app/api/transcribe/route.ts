@@ -1,120 +1,123 @@
-import { NextRequest, NextResponse } from "next/server";
+﻿import { NextRequest, NextResponse } from "next/server";
 import OpenAI from "openai";
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
+type OpenAIErrorPayload = {
+  message?: string;
+  code?: string;
+  type?: string;
+  status?: number;
+};
+
+const toOpenAIError = (error: unknown): OpenAIErrorPayload => {
+  if (typeof error !== "object" || error === null) {
+    return {};
+  }
+
+  const record = error as Record<string, unknown>;
+  return {
+    message: typeof record.message === "string" ? record.message : undefined,
+    code: typeof record.code === "string" ? record.code : undefined,
+    type: typeof record.type === "string" ? record.type : undefined,
+    status: typeof record.status === "number" ? record.status : undefined,
+  };
+};
+
 export async function POST(req: NextRequest) {
   try {
-    console.log("=== Starting transcription request ===");
-    
+    console.log("[transcribe] Received transcription request");
+
     const formData = await req.formData();
     const file = formData.get("file");
 
     if (!file || !(file instanceof File)) {
-      console.log("❌ Invalid file upload");
-      return NextResponse.json(
-        { error: "Invalid file upload" },
-        { status: 400 }
-      );
+      console.log("[transcribe] Invalid file upload");
+      return NextResponse.json({ error: "Invalid file upload" }, { status: 400 });
     }
 
-    console.log("✅ File received:", file.name, "Size:", file.size, "Type:", file.type);
+    console.log("[transcribe] File received", {
+      name: file.name,
+      size: file.size,
+      type: file.type,
+    });
 
     if (file.size > 25 * 1024 * 1024) {
-      console.log("❌ File too large:", file.size);
-      return NextResponse.json(
-        { error: "File size exceeds 25MB limit" },
-        { status: 413 }
-      );
+      console.log("[transcribe] File too large", file.size);
+      return NextResponse.json({ error: "File size exceeds 25MB limit" }, { status: 413 });
     }
 
-    // Validate file type
-    const allowedTypes = ['audio/mpeg', 'audio/mp3', 'audio/wav', 'audio/m4a', 'audio/aac'];
+    const allowedTypes = ["audio/mpeg", "audio/mp3", "audio/wav", "audio/m4a", "audio/aac"];
     if (!allowedTypes.includes(file.type)) {
-      console.log("❌ Invalid file type:", file.type);
+      console.log("[transcribe] Invalid file type", file.type);
       return NextResponse.json(
         { error: "Invalid file type. Please use MP3, WAV, or M4A." },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
-    // console.log("🚀 Starting OpenAI transcription...");
-
     try {
-      const transcription = await openai.audio.transcriptions.create({
-        file: file,
-        model: "whisper-1",
-        response_format: "verbose_json",
-        timestamp_granularities: ["segment"]
-      }, {
-        timeout: 120000 // 2 minutes
-      });
-
-      // console.log("✅ Transcription successful");
-      // console.log("📝 Text length:", transcription.text?.length || 0);
-      // console.log("📊 Segments count:", transcription.segments?.length || 0);
+      const transcription = await openai.audio.transcriptions.create(
+        {
+          file,
+          model: "whisper-1",
+          response_format: "verbose_json",
+          timestamp_granularities: ["segment"],
+        },
+        { timeout: 120_000 },
+      );
 
       return NextResponse.json({
         text: transcription.text,
-        segments: transcription.segments
+        segments: transcription.segments,
       });
-
-    } catch (openaiError: any) {
-      console.error("❌ OpenAI API Error:", {
-        message: openaiError.message,
-        code: openaiError.code,
-        type: openaiError.type,
-        status: openaiError.status
-      });
+    } catch (openaiError: unknown) {
+      const { message, code, type, status } = toOpenAIError(openaiError);
+      console.error("[transcribe] OpenAI API error", { message, code, type, status });
 
       let errorMessage = "Transcription failed";
-      
-      if (openaiError.code === 'invalid_api_key') {
+      const safeMessage = message ?? "OpenAI API error";
+
+      if (code === "invalid_api_key") {
         errorMessage = "API key is invalid or expired";
-      } else if (openaiError.code === 'rate_limit_exceeded') {
+      } else if (code === "rate_limit_exceeded") {
         errorMessage = "Rate limit exceeded. Please try again later.";
-      } else if (openaiError.message?.includes('timeout')) {
+      } else if (safeMessage.toLowerCase().includes("timeout")) {
         errorMessage = "Request timed out. Please try with a shorter audio file.";
-      } else if (openaiError.message?.includes('file')) {
+      } else if (safeMessage.toLowerCase().includes("file")) {
         errorMessage = "Invalid audio file format.";
       } else {
-        errorMessage = openaiError.message || "OpenAI API error";
+        errorMessage = safeMessage;
       }
 
-      return NextResponse.json(
-        { error: errorMessage },
-        { status: 500 }
-      );
+      return NextResponse.json({ error: errorMessage }, { status: status ?? 500 });
+    }
+  } catch (error: unknown) {
+    console.error("[transcribe] General transcription error", error);
+
+    let errorMessage = "Transcription failed. Please try again.";
+    if (error instanceof Error) {
+      const normalized = error.message.toLowerCase();
+      if (normalized.includes("econnreset")) {
+        errorMessage = "Network connection failed. Please check your internet and try again.";
+      } else if (normalized.includes("timeout")) {
+        errorMessage = "Request timed out. Please try with a shorter audio file.";
+      } else {
+        errorMessage = error.message || errorMessage;
+      }
     }
 
-  } catch (error: any) {
-    console.error("❌ General transcription error:", error);
-    
-    let errorMessage = "Transcription failed";
-    
-    if (error.message?.includes('ECONNRESET')) {
-      errorMessage = "Network connection failed. Please check your internet and try again.";
-    } else if (error.message?.includes('timeout')) {
-      errorMessage = "Request timed out. Please try with a shorter audio file.";
-    } else {
-      errorMessage = error.message || "Transcription failed. Please try again.";
-    }
-
-    return NextResponse.json(
-      { error: errorMessage },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: errorMessage }, { status: 500 });
   }
 }
 
-export const OPTIONS = async () => {
-  return new NextResponse(null, {
+export const OPTIONS = async () =>
+  new NextResponse(null, {
     headers: {
       "Access-Control-Allow-Origin": "*",
       "Access-Control-Allow-Methods": "POST, OPTIONS",
       "Access-Control-Allow-Headers": "Content-Type",
     },
   });
-};

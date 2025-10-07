@@ -155,6 +155,7 @@ export async function POST(req: Request) {
         status: data.status ?? "active",
         starts_at: startISO,
         ends_at: endISO,
+        auto_renew: data.status !== "canceled",
         updated_at: new Date().toISOString(),
       };
     
@@ -232,11 +233,16 @@ export async function POST(req: Request) {
           "subscription.paused": "paused",
           "subscription.resumed": "active",
         };
+        const autoRenewMap: Record<string, boolean> = {
+          "subscription.canceled": false,
+          "subscription.paused": false,
+          "subscription.resumed": true,
+        };
         const { error } = await supabaseAdmin
           .from("subscriptions")
           .update({
             status: statusMap[eventType],
-            // sync dates if Paddle includes them
+            auto_renew: autoRenewMap[eventType],
             starts_at: startISO ?? undefined,
             ends_at: endISO ?? undefined,
             updated_at: new Date().toISOString(),
