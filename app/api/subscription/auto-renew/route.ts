@@ -33,6 +33,7 @@ async function getSessionAndSubscription() {
     .from("subscriptions")
     .select("id, auto_renew, status, ends_at, cancel_at, paddle_subscription_id")
     .eq("user_id", user.id)
+    .eq("status", "active") // filter to active to avoid enum mismatch
     .order("ends_at", { ascending: false, nullsFirst: false })
     .limit(1)
     .maybeSingle<SubscriptionRow>();

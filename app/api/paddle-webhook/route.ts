@@ -5,6 +5,34 @@ import supabaseAdmin from "@/lib/supabase/admin";
 
 export const dynamic = "force-dynamic";
 
+const PADDLE_API_URL = process.env.PADDLE_API_URL ?? "https://api.paddle.com";
+const PADDLE_API_KEY = process.env.PADDLE_API_KEY;
+
+async function callPaddle(path: string, init: RequestInit) {
+  if (!PADDLE_API_KEY) {
+    throw new Error("PADDLE_API_KEY is not set");
+  }
+
+  const response = await fetch(`${PADDLE_API_URL}${path}`, {
+    cache: "no-store",
+    ...init,
+    headers: {
+      Accept: "application/json",
+      Authorization: `Bearer ${PADDLE_API_KEY}`,
+      "Content-Type": "application/json",
+      ...(init.headers ?? {}),
+    },
+  });
+
+  if (!response.ok) {
+    const payload = await response.json().catch(() => ({}));
+    const message = payload?.error?.message ?? payload?.message ?? `Paddle request failed (${response.status})`;
+    throw new Error(message);
+  }
+
+  return response.status === 204 ? null : await response.json();
+}
+
 type PaddleItemPrice = { id: string };
 type PaddleItem = { price?: PaddleItemPrice | null } | null;
 
@@ -160,6 +188,45 @@ export async function POST(req: Request) {
       };
     
       if (existingActive) {
+        const isDifferent =
+          Boolean(existingActive.paddle_subscription_id) &&
+          existingActive.paddle_subscription_id !== paddleSubscriptionId;
+
+        if (isDifferent) {
+          try {
+            const cancelPayload = await callPaddle(
+              `/subscriptions/${existingActive.paddle_subscription_id}/cancel`,
+              {
+                method: "POST",
+                body: JSON.stringify({ effective_from: "immediately" }),
+              },
+            );
+            const effectiveAt = cancelPayload?.data?.scheduled_change?.effective_at ?? new Date().toISOString();
+            await supabaseAdmin
+              .from("subscriptions")
+              .update({
+                status: "canceled",
+                auto_renew: false,
+                ends_at: effectiveAt ? new Date(effectiveAt).toISOString() : new Date().toISOString(),
+                cancel_at: effectiveAt ? new Date(effectiveAt).toISOString() : new Date().toISOString(),
+                updated_at: new Date().toISOString(),
+              })
+              .eq("id", existingActive.id);
+          } catch (e) {
+            console.error("[webhook] failed to cancel previous subscription", e);
+            // Continue and record new subscription to avoid blocking the user
+          }
+
+          const { error } = await supabaseAdmin
+            .from("subscriptions")
+            .insert({
+              user_id: userId,
+              ...payload,
+            });
+          if (error) throw error;
+
+          return NextResponse.json({ ok: true });
+        }
         // 2) Update the active row in place (avoids creating a second active row)
         const { error } = await supabaseAdmin
           .from("subscriptions")
