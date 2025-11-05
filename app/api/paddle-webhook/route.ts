@@ -215,6 +215,20 @@ export async function POST(req: Request) {
           } catch (e) {
             console.error("[webhook] failed to cancel previous subscription", e);
             // Continue and record new subscription to avoid blocking the user
+            try {
+              await supabaseAdmin
+                .from("subscriptions")
+                .update({
+                  status: "canceled",
+                  auto_renew: false,
+                  ends_at: new Date().toISOString(),
+                  cancel_at: new Date().toISOString(),
+                  updated_at: new Date().toISOString(),
+                })
+                .eq("id", existingActive.id);
+            } catch (persistErr) {
+              console.error("[webhook] unable to mark previous subscription as canceled locally", persistErr);
+            }
           }
 
           const { error } = await supabaseAdmin

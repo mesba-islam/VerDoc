@@ -196,6 +196,9 @@ export function PricingPlans() {
                 price={`$${plan.price}/${plan.billing_interval}`}
                 isStarter={plan.name === 'Starter'}
                 planId={plan.id}
+                planName={plan.name}
+                planPrice={plan.price}
+                billingInterval={plan.billing_interval}
               />
             </div>
           ))}
