@@ -1,6 +1,7 @@
 "use client";
 import { generateTitleFromSummary } from '@/app/lib/summaryUtils';
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useCallback } from "react";
+import type { RefObject } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Play, Pause, Download, Loader2, CheckCircle, Copy } from "lucide-react";
 import DropzoneComponent from "@/app/components/Dropzone";
@@ -10,6 +11,7 @@ import SummaryGenerator from '@/app/components/SummaryGenerator';
 import { ErrorBoundary } from 'react-error-boundary';
 import { generateSummaryPDF } from '@/app/generatePdf';
 import useUser from '@/app/hook/useUser';
+import { cn } from "@/lib/utils";
 
 type LimitResponse = {
   canTranscribe: boolean;
@@ -35,37 +37,82 @@ type RecordResponse = {
   };
 };
 
-const AudioPlayer = ({ audioBlob }: { audioBlob: Blob }) => {
-  const [isPlaying, setIsPlaying] = useState(false);
-  const audioRef = useRef<HTMLAudioElement | null>(null);
+type TranscriptSegment = {
+  text: string;
+  start: number;
+  end: number;
+};
+
+type AudioPlayerProps = {
+  audioBlob: Blob;
+  audioRef: RefObject<HTMLAudioElement>;
+  isPlaying: boolean;
+  onPlayStateChange: (isPlaying: boolean) => void;
+  onTimeUpdate?: (currentTime: number) => void;
+};
+
+const AudioPlayer = ({ audioBlob, audioRef, isPlaying, onPlayStateChange, onTimeUpdate }: AudioPlayerProps) => {
+  const [audioUrl, setAudioUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    const url = URL.createObjectURL(audioBlob);
+    setAudioUrl(url);
+    onPlayStateChange(false);
+    return () => {
+      URL.revokeObjectURL(url);
+      setAudioUrl(null);
+    };
+  }, [audioBlob, onPlayStateChange]);
 
   const togglePlayback = () => {
-    if (!audioRef.current) return;
-    if (isPlaying) audioRef.current.pause();
-    else audioRef.current.play();
-    setIsPlaying(!isPlaying);
+    const element = audioRef.current;
+    if (!element) return;
+
+    if (isPlaying) {
+      element.pause();
+      onPlayStateChange(false);
+    } else {
+      const playPromise = element.play();
+      if (playPromise) {
+        void playPromise.then(() => onPlayStateChange(true)).catch(() => undefined);
+      } else {
+        onPlayStateChange(true);
+      }
+    }
   };
 
   return (
     <div className="group relative">
       <div className="absolute inset-0 bg-gradient-to-r from-cyan-400/20 to-blue-500/20 rounded-xl filter blur-2xl group-hover:blur-3xl transition-all duration-300" />
       <div className="relative flex items-center justify-between p-4 bg-dark rounded-xl shadow-lg border border-gray-100">
-        <button onClick={togglePlayback} className="p-3 rounded-full bg-cyan-500 hover:bg-cyan-600 transition-colors shadow-md">
+        <button onClick={togglePlayback} className="p-3 rounded-full bg-cyan-500 hover:bg-cyan-600 transition-colors shadow-md" aria-label={isPlaying ? "Pause audio" : "Play audio"}>
           {isPlaying ? <Pause className="w-5 h-5 text-white" /> : <Play className="w-5 h-5 text-white" />}
         </button>
         <div className="mx-4">
           <WaveformVisualizer isPlaying={isPlaying} />
         </div>
-        <a
-          href={URL.createObjectURL(audioBlob)}
-          download="converted-audio.mp3"
-          className="p-2 rounded-lg hover:bg-gray-100 transition-colors"
-        >
-          <Download className="w-6 h-6 text-cyan-600" />
-        </a>
-        <audio ref={audioRef} onEnded={() => setIsPlaying(false)} className="hidden">
-          <source src={URL.createObjectURL(audioBlob)} type="audio/mpeg" />
-        </audio>
+        {audioUrl ? (
+          <>
+            <a
+              href={audioUrl}
+              download="converted-audio.mp3"
+              className="p-2 rounded-lg hover:bg-gray-100 transition-colors"
+            >
+              <Download className="w-6 h-6 text-cyan-600" />
+            </a>
+            <audio
+              ref={audioRef}
+              src={audioUrl}
+              onEnded={() => onPlayStateChange(false)}
+              onPause={() => onPlayStateChange(false)}
+              onPlay={() => onPlayStateChange(true)}
+              onTimeUpdate={(event) => onTimeUpdate?.(event.currentTarget.currentTime)}
+              className="hidden"
+            />
+          </>
+        ) : (
+          <div className="p-2 rounded-lg text-sm text-slate-400">Preparing audio…</div>
+        )}
       </div>
     </div>
   );
@@ -92,14 +139,26 @@ function parseAudioDuration(durationString: string): number {
   return (parseInt(m) || 0) + (parseInt(s) || 0) / 60;
 }
 
+const formatTimestamp = (seconds: number): string => {
+  if (!Number.isFinite(seconds)) return "0:00";
+  const totalSeconds = Math.max(0, Math.floor(seconds));
+  const minutes = Math.floor(totalSeconds / 60);
+  const remainingSeconds = totalSeconds % 60;
+  return `${minutes}:${remainingSeconds.toString().padStart(2, "0")}`;
+};
+
 export default function TranscribePage() {
   const { data: user, isLoading: isUserLoading } = useUser();
+  const audioRef = useRef<HTMLAudioElement | null>(null);
 
   const [transcriptionLimit, setTranscriptionLimit] = useState<LimitResponse>({
     canTranscribe: false,
     message: 'Loading subscription...',
     remainingMinutes: 0
   });
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [activeSegmentIndex, setActiveSegmentIndex] = useState<number | null>(null);
+  const segmentRefs = useRef<(HTMLButtonElement | null)[]>([]);
   const [duration, setDuration] = useState<string | null>(null);
   const [isSummaryModalOpen, setIsSummaryModalOpen] = useState(false);
   const [hasGeneratedSummary, setHasGeneratedSummary] = useState(false);
@@ -123,6 +182,7 @@ export default function TranscribePage() {
     setSegments,
     setFile,
   } = useFileStore();
+  const transcriptSegments = segments ?? [];
 
   useEffect(() => {
     const handleConversion = async () => {
@@ -153,25 +213,6 @@ export default function TranscribePage() {
     }
   }, [audioBlob]);
 
-  type GroupedSegment = { text: string; pauseDuration: number; };
-
-  const groupSegmentsWithPauses = (): GroupedSegment[] => {
-    if (!segments) return [];
-    const grouped: GroupedSegment[] = [];
-    let currentGroup: string[] = [];
-    let lastEnd = 0;
-    segments.forEach((segment, index) => {
-      if (segment.start - lastEnd > 1 && index !== 0) {
-        grouped.push({ text: currentGroup.join(' '), pauseDuration: segment.start - lastEnd });
-        currentGroup = [];
-      }
-      currentGroup.push(segment.text);
-      lastEnd = segment.end;
-    });
-    if (currentGroup.length > 0) grouped.push({ text: currentGroup.join(' '), pauseDuration: 0 });
-    return grouped;
-  };
-
   // Load limits from the SERVER (cookie session = source of truth)
   useEffect(() => {
     const run = async () => {
@@ -192,6 +233,15 @@ export default function TranscribePage() {
     };
     run();
   }, [user]);
+
+  useEffect(() => {
+    segmentRefs.current = [];
+    if (segments && segments.length > 0) {
+      setActiveSegmentIndex(0);
+    } else {
+      setActiveSegmentIndex(null);
+    }
+  }, [segments]);
 
   const handleTranscription = async () => {
     if (!audioBlob || !user?.id || !duration) return;
@@ -298,6 +348,55 @@ export default function TranscribePage() {
     }
   };
 
+  const handleTimeUpdate = useCallback((currentTime: number) => {
+    if (!segments || segments.length === 0) return;
+    const nextIndex = segments.findIndex(
+      (segment) => currentTime >= segment.start && currentTime < segment.end,
+    );
+
+    if (nextIndex === -1) {
+      if (
+        segments.length > 0 &&
+        currentTime >= segments[segments.length - 1].end &&
+        activeSegmentIndex !== segments.length - 1
+      ) {
+        setActiveSegmentIndex(segments.length - 1);
+        const finalNode = segmentRefs.current[segments.length - 1];
+        if (finalNode) {
+          finalNode.scrollIntoView({ block: "nearest" });
+        }
+      }
+      return;
+    }
+
+    if (nextIndex !== activeSegmentIndex) {
+      setActiveSegmentIndex(nextIndex);
+      const targetNode = segmentRefs.current[nextIndex];
+      if (targetNode) {
+        targetNode.scrollIntoView({ block: "nearest", behavior: "smooth" });
+      }
+    }
+  }, [segments, activeSegmentIndex]);
+
+  const handleSegmentSelect = useCallback((segment: TranscriptSegment, index: number) => {
+    const node = segmentRefs.current[index];
+    if (node) {
+      node.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    }
+
+    setActiveSegmentIndex(index);
+    const element = audioRef.current;
+    if (!element) return;
+
+    element.currentTime = Math.max(segment.start - 0.05, 0);
+    const playPromise = element.play();
+    if (playPromise) {
+      void playPromise.then(() => setIsPlaying(true)).catch(() => undefined);
+    } else {
+      setIsPlaying(true);
+    }
+  }, [setIsPlaying, audioRef]);
+
   const formatAudioDuration = (audioBlob: Blob) => {
     const url = URL.createObjectURL(audioBlob);
     const audio = new Audio(url);
@@ -337,6 +436,13 @@ export default function TranscribePage() {
     setTranscript(null);
     setSegments(null);
     setSummary('');
+    setIsPlaying(false);
+    setActiveSegmentIndex(null);
+    segmentRefs.current = [];
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.currentTime = 0;
+    }
   };
 
   if (isUserLoading) return <div>Loading...</div>;
@@ -539,7 +645,13 @@ export default function TranscribePage() {
               {audioBlob && (
                 <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="mb-6 p-4 bg-blend-darken-50 rounded-xl">
                   <h3 className="text-lg font-medium text-gray-800 mb-3">Audio</h3>
-                  <AudioPlayer audioBlob={audioBlob} />
+                  <AudioPlayer
+                    audioBlob={audioBlob}
+                    audioRef={audioRef}
+                    isPlaying={isPlaying}
+                    onPlayStateChange={setIsPlaying}
+                    onTimeUpdate={handleTimeUpdate}
+                  />
                 </motion.div>
               )}
             </AnimatePresence>
@@ -631,19 +743,46 @@ export default function TranscribePage() {
                   <div className="border-b border-gray-200 pb-3 mb-4">
                     <h3 className="text-xl font-semibold text-white-500">Transcript</h3>
                   </div>
-                  <div className="max-h-64 overflow-y-auto pr-2 mb-6 scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100">
-                    {groupSegmentsWithPauses().map((group, index) => (
-                      <div key={index} className="mb-4 last:mb-0">
-                        <p className="text-white-400 whitespace-pre-wrap leading-relaxed">{group.text}</p>
-                        {group.pauseDuration > 0 && (
-                          <div className="flex items-center gap-2 mt-2 text-xs text-cyan-500">
-                            <span>⏸</span>
-                            <span className="h-px bg-cyan-100 flex-1"></span>
-                            <span>{group.pauseDuration.toFixed(1)}s pause</span>
-                          </div>
-                        )}
-                      </div>
-                    ))}
+                  <div className="max-h-80 overflow-y-auto pr-2 mb-6 scrollbar-thin scrollbar-thumb-cyan-500/40 scrollbar-track-transparent">
+                    {transcriptSegments.length > 0 ? (
+                      transcriptSegments.map((segment, index) => {
+                        const isActive = index === activeSegmentIndex;
+                        return (
+                          <button
+                            key={`${segment.start}-${index}`}
+                            type="button"
+                            ref={(element) => { segmentRefs.current[index] = element; }}
+                            onClick={() => handleSegmentSelect(segment, index)}
+                            aria-pressed={isActive}
+                            className={cn(
+                              "w-full flex items-start gap-4 rounded-lg px-3 py-2 text-left transition-colors duration-150 border border-transparent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-900",
+                              isActive ? "bg-cyan-500/20 border-cyan-500/40 shadow-inner" : "hover:bg-white/5",
+                            )}
+                          >
+                            <span
+                            className={cn(
+                              "min-w-[3.5rem] text-xs font-semibold px-2 py-1 rounded-md tracking-wide bg-slate-800 text-cyan-100 dark:text-cyan-200",
+                              isActive && "bg-cyan-400 text-slate-900",
+                            )}
+                          >
+                            {formatTimestamp(segment.start)}
+                          </span>
+                            <span
+                              className={cn(
+                                "text-sm leading-6 text-slate-700 dark:text-slate-100/90",
+                                isActive ? "font-medium text-slate-900 dark:text-slate-100" : "text-slate-700 dark:text-slate-100/90",
+                              )}
+                            >
+                              {segment.text.trim()}
+                            </span>
+                          </button>
+                        );
+                      })
+                    ) : (
+                      <p className="text-sm text-slate-300/70">
+                        Transcript ready, but timestamps are unavailable for this file.
+                      </p>
+                    )}
                   </div>
 
                   <div className="relative group w-fit mx-auto">
