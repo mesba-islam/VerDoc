@@ -6,15 +6,16 @@ import { AudioWaveform, Settings, FileClock } from "lucide-react";
 import { Suspense } from "react";
 import ThemeToggle from "./ThemeToggle";
 import UserProfile from "@/components/supaauth/user-profile";
+import { Tooltip } from "@/components/ui/tooltip";
 
 export default function Navbar() {
   const pathname = usePathname(); 
   const { data, isLoading  } = useUser();
   const navItems = [
-    { href: "/transcribe", icon: AudioWaveform },
-    { href: "/archive", icon: FileClock },
+    { href: "/transcribe", icon: AudioWaveform, label: "Transcribe" },
+    { href: "/archive", icon: FileClock, label: "Archive" },
     // { href: "/profile", icon: UserRoundCog },
-    { href: "/settings", icon: Settings },
+    { href: "/settings", icon: Settings, label: "Settings" },
   ];
 
   return (
@@ -28,16 +29,26 @@ export default function Navbar() {
 
       {/* Center - Navigation Links */}
       <ul className="flex gap-6 px-5 py-2 rounded-xl border border-border">
-        {navItems.map(({ href, icon: Icon }) => (
+        {navItems.map(({ href, icon: Icon, label }) => (
           <li key={href}>
-            <Link
-              href={href}
-              className={`flex items-center group transition-colors ${
-                pathname === href ? "text-cyan-500 font-bold" : "text-gray-700"
-              }`}
-            >
-              <Icon className="w-8 h-8 group-hover:text-cyan-500 transition-colors duration-300" strokeWidth={0.75} />
-            </Link>
+            <Tooltip label={label}>
+              <Link
+                href={href}
+                aria-label={label}
+                className={`flex items-center group transition-colors ${
+                  pathname === href
+                    ? "text-cyan-500 dark:text-cyan-400 font-bold"
+                    : "text-muted-foreground hover:text-foreground dark:hover:text-foreground"
+                }`}
+              >
+                <Icon
+                  className="w-8 h-8 text-current group-hover:text-cyan-500 dark:group-hover:text-cyan-400 transition-colors duration-300"
+                  strokeWidth={0.75}
+                  aria-hidden="true"
+                />
+                <span className="sr-only">{label}</span>
+              </Link>
+            </Tooltip>
           </li>
         ))}
       </ul>
