@@ -1,8 +1,9 @@
 "use client";
 import useUser  from "@/app/hook/useUser";
+import { useSubscriptionPlan } from "@/app/hook/useSubscriptionPlan";
 import { usePathname } from "next/navigation";
 import Link from "next/link";
-import { AudioWaveform, Settings, FileClock } from "lucide-react";
+import { AudioWaveform, CreditCard, FileClock } from "lucide-react";
 import { Suspense } from "react";
 import ThemeToggle from "./ThemeToggle";
 import UserProfile from "@/components/supaauth/user-profile";
@@ -10,12 +11,17 @@ import { Tooltip } from "@/components/ui/tooltip";
 
 export default function Navbar() {
   const pathname = usePathname(); 
-  const { data, isLoading  } = useUser();
+  const { data: user, isLoading: userLoading  } = useUser();
+  const { data: plan, isLoading: planLoading } = useSubscriptionPlan(Boolean(user?.id));
+  
+  // Only show billing if user is authenticated AND has an active subscription
+  const hasBillingAccess = user && plan && !planLoading;
+  
   const navItems = [
     { href: "/transcribe", icon: AudioWaveform, label: "Transcribe" },
     { href: "/archive", icon: FileClock, label: "Archive" },
     // { href: "/profile", icon: UserRoundCog },
-    { href: "/settings", icon: Settings, label: "Settings" },
+    ...(hasBillingAccess ? [{ href: "/billing", icon: CreditCard, label: "Billing" }] : []),
   ];
 
   return (
@@ -54,9 +60,9 @@ export default function Navbar() {
       </ul>
       {/* Right side group */}
       <div className="flex items-center gap-3">
-        {isLoading ? (
+        {userLoading ? (
           <div className="h-9 w-9 rounded-full bg-muted animate-pulse" />
-        ) : data ? (
+        ) : user ? (
           <>
             <UserProfile />
             <Suspense fallback={<div className="h-9 w-9 rounded-full bg-muted" />}>

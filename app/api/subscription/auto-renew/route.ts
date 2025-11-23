@@ -2,10 +2,13 @@
 import { createSupabaseServer } from "@/lib/supabase/server";
 import supabaseAdmin from "@/lib/supabase/admin";
 
-const PADDLE_API_URL = process.env.PADDLE_API_URL ?? "https://api.paddle.com";
+const PADDLE_API_URL =
+  process.env.NEXT_PUBLIC_PADDLE_ENV === "sandbox"
+    ? "https://sandbox-api.paddle.com"
+    : process.env.PADDLE_API_URL ?? "https://api.paddle.com";
 const PADDLE_API_KEY = process.env.PADDLE_API_KEY;
 
-const MANAGEABLE_STATUSES = new Set(["active", "trialing"]);
+const MANAGEABLE_STATUSES = new Set(["active"]);
 
 type SubscriptionRow = {
   id: string;
@@ -15,6 +18,15 @@ type SubscriptionRow = {
   cancel_at: string | null;
   paddle_subscription_id: string | null;
 };
+
+type PaddleResponse = {
+  data?: {
+    current_billing_period?: { ends_at?: string | null } | null;
+    next_payment?: { date?: string | null } | null;
+    scheduled_change?: { effective_at?: string | null } | null;
+    status?: string | null;
+  } | null;
+} | null;
 
 const toISO = (value?: string | null) => (value ? new Date(value).toISOString() : null);
 
@@ -33,8 +45,10 @@ async function getSessionAndSubscription() {
     .from("subscriptions")
     .select("id, auto_renew, status, ends_at, cancel_at, paddle_subscription_id")
     .eq("user_id", user.id)
-    .eq("status", "active") // filter to active to avoid enum mismatch
+    .eq("status", "active")
+    .order("cancel_at", { ascending: true, nullsFirst: true })
     .order("ends_at", { ascending: false, nullsFirst: false })
+    .order("updated_at", { ascending: false, nullsFirst: false })
     .limit(1)
     .maybeSingle<SubscriptionRow>();
 
@@ -51,7 +65,10 @@ async function callPaddle(path: string, init: RequestInit) {
     throw new Error("PADDLE_API_KEY is not set");
   }
 
-  const response = await fetch(`${PADDLE_API_URL}${path}`, {
+  const url = `${PADDLE_API_URL}${path}`;
+  console.log(`[paddle] ${init.method || "GET"} ${url}`);
+
+  const response = await fetch(url, {
     cache: "no-store",
     ...init,
     headers: {
@@ -63,9 +80,20 @@ async function callPaddle(path: string, init: RequestInit) {
   });
 
   if (!response.ok) {
-    const payload = await response.json().catch(() => ({}));
+    let raw = "";
+    let payload: Record<string, unknown> | null = null;
+    try {
+      raw = await response.text();
+      payload = raw ? (JSON.parse(raw) as Record<string, unknown>) : null;
+    } catch {
+      // ignore non-json errors
+    }
+
     const message =
-      payload?.error?.message ?? payload?.message ?? `Paddle request failed (${response.status})`;
+      (payload?.error as { message?: string } | undefined)?.message ??
+      (payload?.message as string | undefined) ??
+      (raw ? `Paddle request failed (${response.status}): ${raw}` : `Paddle request failed (${response.status})`);
+    console.error(`[paddle] ${init.method || "GET"} ${path} failed with ${response.status}`, message);
     throw new Error(message);
   }
 
@@ -117,30 +145,52 @@ export async function PATCH(req: Request) {
   }
 
   try {
-    const endpoint = desired
-      ? `/subscriptions/${subscription.paddle_subscription_id}/resume`
-      : `/subscriptions/${subscription.paddle_subscription_id}/cancel`;
+    let paddlePayload: PaddleResponse = null;
 
-    const payload = desired ? null : { effective_from: "next_billing_period" };
-
-    const paddlePayload = await callPaddle(endpoint, {
-      method: "POST",
-      ...(payload ? { body: JSON.stringify(payload) } : {}),
-    });
+    if (desired) {
+      if (subscription.status === "paused") {
+        // Resume a paused subscription
+        paddlePayload = await callPaddle(
+          `/subscriptions/${subscription.paddle_subscription_id}/resume`,
+          { method: "POST" },
+        );
+      } else {
+        // Re-enable auto-renew by removing the scheduled cancellation
+        // Use the update subscription endpoint to unschedule the cancellation
+        const base = subscription.paddle_subscription_id;
+        paddlePayload = await callPaddle(
+          `/subscriptions/${base}`,
+          {
+            method: "PATCH",
+            body: JSON.stringify({ scheduled_change: null }),
+          },
+        );
+      }
+    } else {
+      // Turn auto-renew off at the next billing period
+      paddlePayload = await callPaddle(
+        `/subscriptions/${subscription.paddle_subscription_id}/cancel`,
+        {
+          method: "POST",
+          body: JSON.stringify({ effective_from: "next_billing_period" }),
+        },
+      );
+    }
 
     const renewalEndsAt =
       paddlePayload?.data?.current_billing_period?.ends_at ??
       paddlePayload?.data?.next_payment?.date ??
       subscription.ends_at;
 
-    const scheduledCancel =
-      desired ? null : paddlePayload?.data?.scheduled_change?.effective_at ?? renewalEndsAt;
+    const scheduledCancel = desired
+      ? null
+      : paddlePayload?.data?.scheduled_change?.effective_at ?? renewalEndsAt;
 
     const { data, error } = await supabaseAdmin
       .from("subscriptions")
       .update({
         auto_renew: desired,
-        status: paddlePayload?.data?.status ?? subscription.status,
+        status: (paddlePayload?.data?.status as string | undefined) ?? subscription.status,
         ends_at: toISO(renewalEndsAt) ?? subscription.ends_at,
         cancel_at: toISO(scheduledCancel),
         updated_at: new Date().toISOString(),
