@@ -24,8 +24,10 @@ export default function Navbar() {
     ...(hasBillingAccess ? [{ href: "/billing", icon: CreditCard, label: "Billing" }] : []),
   ];
 
+  const navBorder = pathname === "/" ? "" : "border-b border-border";
+
   return (
-    <nav className="px-10 py-5 flex items-center justify-between border-b border-border">
+    <nav className={`px-6 md:px-10 py-4 flex items-center justify-between ${navBorder}`}>
       {/* Left - App Logo */}
       <div className="text-2xl font-bold tracking-wide">
         <Link href="/" className="flex items-center">
@@ -34,7 +36,7 @@ export default function Navbar() {
       </div>
 
       {/* Center - Navigation Links */}
-      <ul className="flex gap-6 px-5 py-2 rounded-xl border border-border">
+      <ul className="flex gap-4 md:gap-6 px-4 md:px-5 py-2 rounded-xl border border-border">
         {navItems.map(({ href, icon: Icon, label }) => (
           <li key={href}>
             <Tooltip label={label}>
@@ -48,8 +50,8 @@ export default function Navbar() {
                 }`}
               >
                 <Icon
-                  className="w-8 h-8 text-current group-hover:text-cyan-500 dark:group-hover:text-cyan-400 transition-colors duration-300"
-                  strokeWidth={0.75}
+                  className="h-6 w-6 md:h-7 md:w-7 text-current group-hover:text-cyan-500 dark:group-hover:text-cyan-400 transition-colors duration-300"
+                  strokeWidth={0.9}
                   aria-hidden="true"
                 />
                 <span className="sr-only">{label}</span>
@@ -84,3 +86,4 @@ export default function Navbar() {
     </nav>
   );
 }
+

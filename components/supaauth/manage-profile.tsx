@@ -85,12 +85,12 @@ export default function ManageProfile() {
       <DialogTrigger asChild>
         <button id="manage-profile"></button>
       </DialogTrigger>
-      <DialogContent className="w-full md:w-[55rem] flex flex-col sm:flex-row">
+      <DialogContent className="w-full max-w-[95vw] sm:max-w-3xl max-h-[90vh] overflow-y-auto p-0 mx-auto flex flex-col sm:flex-row gap-4 sm:gap-0 rounded-xl bg-card">
         <VisuallyHidden asChild>
           <DialogTitle>Manage Profile</DialogTitle>
         </VisuallyHidden>
 
-        <div className="w-60 h-full rounded-s-lg p-5 space-y-7">
+        <div className="w-full sm:w-60 rounded-lg sm:rounded-s-lg p-4 sm:p-5 space-y-7 border-b sm:border-b-0 sm:border-r sm:border-l-0 sm:border-t-0">
           <div>
             <h1 className="text-2xl font-bold">Account</h1>
             <p className="text-sm dark:text-gray-300">Manage your account info.</p>
@@ -110,32 +110,32 @@ export default function ManageProfile() {
           </div>
         </div>
 
-        <div className="flex-1 h-full border-l rounded-lg px-5 sm:px-10 py-5 divide-y-[0.5px] space-y-5">
+        <div className="flex-1 h-full border-t sm:border-t-0 sm:border-l rounded-lg px-4 sm:px-8 py-5 divide-y-[0.5px] space-y-5">
           <h1 className="font-bold text-xl w-36">Profile details</h1>
-          <div className="flex items-center py-5 sm:gap-24">
+          <div className="flex flex-col sm:flex-row sm:items-center gap-3 py-5 sm:gap-24">
             <h1 className="text-sm font-medium w-36">Profile</h1>
             <div className="flex-1 sm:px-3">
               <Avatar />
             </div>
           </div>
-          <div className="flex items-center sm:gap-24 py-5 justify-between">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:gap-24 gap-3 py-5 justify-between">
             <h1 className="text-sm font-medium w-36">Email</h1>
             <div className="flex-1 flex justify-between items-center sm:pl-3">
-              <p className="text-sm">{data?.email}</p>
+              <p className="text-sm break-all">{data?.email}</p>
             </div>
           </div>
-          <div className="flex items-start py-5 gap-2 sm:gap-24">
+          <div className="flex flex-col sm:flex-row items-start py-5 gap-3 sm:gap-24">
             <h1 className="text-sm font-medium w-36">Connected accounts</h1>
             <div className="flex-1 space-y-5">
               <div className="flex items-center gap-2 px-3">
                 <AuthProviderIcon />
                 <p className="capitalize">{data?.app_metadata.provider}</p>
-                <p className="text-sm text-gray-400">{data?.user_metadata.user_name}</p>
+                <p className="text-sm text-gray-400 break-all">{data?.user_metadata.user_name}</p>
               </div>
             </div>
           </div>
 
-          <div className="flex items-start py-5 gap-2 sm:gap-24">
+          <div className="flex flex-col sm:flex-row items-start py-5 gap-3 sm:gap-24">
             <h1 className="text-sm font-medium w-36">Auto-renewal</h1>
             <div className="flex-1 sm:pl-3 space-y-2">
               {autoRenewLoading ? (
