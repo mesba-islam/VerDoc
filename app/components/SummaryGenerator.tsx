@@ -9,9 +9,16 @@ interface SummaryGeneratorProps {
   summary: string;
   onSummaryGenerated?: () => void;
   setSummary: (summary: string) => void;
+  onCustomOpenChange?: (open: boolean) => void;
 }
 
-const SummaryGenerator = ({ transcript, summary, onSummaryGenerated, setSummary }: SummaryGeneratorProps) => {
+const SummaryGenerator = ({
+  transcript,
+  summary,
+  onSummaryGenerated,
+  setSummary,
+  onCustomOpenChange,
+}: SummaryGeneratorProps) => {
 
   const [isGenerating, setIsGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -89,6 +96,7 @@ const SummaryGenerator = ({ transcript, summary, onSummaryGenerated, setSummary 
             <SummaryConfigurator
               onGenerate={handleGenerate}
               isGenerating={isGenerating}
+              onCustomOpenChange={onCustomOpenChange}
             />
           </motion.div>
         )}
@@ -136,26 +144,22 @@ const SummaryGenerator = ({ transcript, summary, onSummaryGenerated, setSummary 
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -20 }}
-            className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700"
+            className="relative overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl dark:border-white/10 dark:bg-gradient-to-br dark:from-slate-950/85 dark:via-slate-900/85 dark:to-slate-950/90"
           >
-            <div className="prose dark:prose-invert max-w-none">
-              {generateTitleFromSummary(summary).content.split('\n').map((line, index) => {
-                // Check if this is the date line (assuming date is in content)
-                const isDateLine = index === 0 && line.match(/[A-Za-z]+ \d{1,2}, \d{4}/);
-
-                return (
-                  <motion.p
-                    key={index}
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: index * 0.05 }}
-                    className={`text-gray-700 dark:text-gray-300 ${isDateLine ? 'font-semibold text-sm mb-4 pb-2 border-b border-gray-200 dark:border-gray-700' : ''
-                      }`}
-                  >
-                    {line}
-                  </motion.p>
-                );
-              })}
+            <div className="pointer-events-none absolute inset-0 opacity-30">
+              <div className="absolute -left-16 top-0 h-48 w-48 bg-[radial-gradient(circle_at_20%_20%,rgba(77,208,225,0.14),transparent_60%)] blur-2xl" />
+              <div className="absolute right-0 bottom-0 h-52 w-52 bg-[radial-gradient(circle_at_80%_80%,rgba(106,175,255,0.12),transparent_60%)] blur-2xl" />
+            </div>
+            <div className="relative border-b border-slate-200 px-6 py-4 flex items-center justify-between dark:border-white/10">
+              <div>
+                <p className="text-xs uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">Document preview</p>
+                <h4 className="text-lg font-semibold text-slate-900 dark:text-white">Formatted summary</h4>
+              </div>
+            </div>
+            <div className="relative px-6 py-6 text-slate-800 dark:text-slate-100">
+              <div className="space-y-4 leading-7 text-sm md:text-base">
+                {renderStructuredSummary(generateTitleFromSummary(summary).content)}
+              </div>
             </div>
           </motion.div>
         )}
@@ -163,5 +167,83 @@ const SummaryGenerator = ({ transcript, summary, onSummaryGenerated, setSummary 
     </div>
   );
 };
+
+type SummaryBlock =
+  | { type: 'list'; items: string[] }
+  | { type: 'paragraph'; text: string }
+  | { type: 'title'; text: string };
+
+function renderStructuredSummary(raw: string) {
+  const lines = raw.split('\n').map((l) => l.trim()).filter(Boolean);
+  const blocks: SummaryBlock[] = [];
+
+  lines.forEach((line, idx) => {
+    const isDateLine = idx === 0 && /[A-Za-z]+ \d{1,2}, \d{4}/.test(line);
+    if (isDateLine) {
+      blocks.push({ type: 'title', text: line });
+      return;
+    }
+    if (line.startsWith('- ')) {
+      const text = line.slice(2).trim();
+      const last = blocks[blocks.length - 1];
+      if (last && last.type === 'list') {
+        last.items.push(text);
+      } else {
+        blocks.push({ type: 'list', items: [text] });
+      }
+      return;
+    }
+    blocks.push({ type: 'paragraph', text: line });
+  });
+
+  const formatBold = (text: string) =>
+    text.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+
+  return blocks.map((block, i) => {
+    if (block.type === 'title') {
+      return (
+        <motion.p
+          key={`title-${i}`}
+          initial={{ opacity: 0, y: 6 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-300"
+        >
+          {block.text}
+        </motion.p>
+      );
+    }
+
+    if (block.type === 'list') {
+      return (
+        <motion.ul
+          key={`list-${i}`}
+          initial={{ opacity: 0, y: 6 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="space-y-2 rounded-xl bg-slate-50/80 px-4 py-3 text-slate-800 shadow-sm ring-1 ring-slate-200/70 dark:bg-slate-900/40 dark:text-slate-100 dark:ring-white/10"
+        >
+          {block.items.map((item, idx) => (
+            <li key={idx} className="flex items-start gap-3 leading-6">
+              <span className="mt-[6px] inline-block h-2 w-2 aspect-square rounded-full bg-cyan-400/85 ring-2 ring-cyan-400/25" />
+              <span
+                className="font-normal"
+                dangerouslySetInnerHTML={{ __html: formatBold(item) }}
+              />
+            </li>
+          ))}
+        </motion.ul>
+      );
+    }
+
+    return (
+      <motion.p
+        key={`p-${i}`}
+        initial={{ opacity: 0, y: 6 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="text-slate-800 dark:text-slate-200 font-semibold"
+        dangerouslySetInnerHTML={{ __html: formatBold(block.text) }}
+      />
+    );
+  });
+}
 
 export default SummaryGenerator;

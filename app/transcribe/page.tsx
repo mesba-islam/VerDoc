@@ -45,7 +45,7 @@ type TranscriptSegment = {
 
 type AudioPlayerProps = {
   audioBlob: Blob;
-  audioRef: RefObject<HTMLAudioElement>;
+  audioRef: RefObject<HTMLAudioElement | null>;
   isPlaying: boolean;
   onPlayStateChange: (isPlaying: boolean) => void;
   onTimeUpdate?: (currentTime: number) => void;
@@ -111,7 +111,7 @@ const AudioPlayer = ({ audioBlob, audioRef, isPlaying, onPlayStateChange, onTime
             />
           </>
         ) : (
-          <div className="p-2 rounded-lg text-sm text-slate-400">Preparing audio…</div>
+          <div className="p-2 rounded-lg text-sm text-slate-400">Preparing audio...</div>
         )}
       </div>
     </div>
@@ -164,6 +164,7 @@ export default function TranscribePage() {
   const [hasGeneratedSummary, setHasGeneratedSummary] = useState(false);
   const [summary, setSummary] = useState('');
   const [isCopied, setIsCopied] = useState(false);
+  const [isCustomPanelOpen, setIsCustomPanelOpen] = useState(false);
 
   const {
     file,
@@ -303,7 +304,7 @@ export default function TranscribePage() {
       }
 
       const responseData = await transcribeResponse.json();
-      console.log("✅ Transcription successful");
+      console.log("Transcription successful");
 
       // Record usage on SERVER
       try {
@@ -337,7 +338,7 @@ export default function TranscribePage() {
       setTranscript(responseData.text);
     } catch (err) {
       const error = err as Error;
-      console.error('❌ Transcription error:', error);
+      console.error('Transcription error:', error);
       let userFriendlyMessage = error.message;
       if (error.message.includes('Connection error')) userFriendlyMessage = 'Network connection failed. Please check your internet and try again.';
       else if (error.message.includes('timeout')) userFriendlyMessage = 'Request timed out. Please try with a shorter audio file.';
@@ -454,14 +455,81 @@ export default function TranscribePage() {
         {isSummaryModalOpen && (
           <motion.div
             initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[999] bg-black/50 dark:bg-black/80 backdrop-blur-sm  flex items-center justify-center "
+            className="fixed inset-0 z-[999] bg-black/60 dark:bg-black/80 backdrop-blur-sm flex items-center justify-center"
           >
-            <motion.div initial={{ scale: 0.95, y: 20 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.95, y: 20 }}
-              className="w-full max-w-4xl bg-background text-foreground rounded-2xl shadow-xl relative overflow-hidden">
-              <AnimatePresence>
+            <motion.div
+              initial={{ scale: 0.95, y: 20 }}
+              animate={{ scale: 1, y: 0 }}
+              exit={{ scale: 0.95, y: 20 }}
+              className="relative w-full max-w-5xl"
+            >
+              <div className="relative flex max-h-[90vh] rounded-3xl border border-slate-200 bg-gradient-to-br from-white via-slate-50 to-slate-100 shadow-2xl dark:border-white/10 dark:from-slate-950/95 dark:via-slate-900/90 dark:to-slate-950/90">
+                <motion.div
+                  className="pointer-events-none absolute -left-24 -top-32 h-72 w-72 rounded-full bg-[radial-gradient(circle_at_30%_30%,rgba(77,208,225,0.25),rgba(21,41,78,0.08),transparent_60%)] blur-3xl dark:bg-[radial-gradient(circle_at_30%_30%,rgba(77,208,225,0.3),rgba(21,41,78,0.12),transparent_60%)]"
+                  animate={{ x: [0, 40, -20, 10, 0], y: [0, 20, 10, -10, 0], scale: [1, 1.03, 0.98, 1.02, 1] }}
+                  transition={{ duration: 18, repeat: Infinity, ease: 'easeInOut' }}
+                />
+                <motion.div
+                  className="pointer-events-none absolute -right-24 bottom-0 h-80 w-80 rounded-full bg-[radial-gradient(circle_at_70%_70%,rgba(122,229,130,0.18),rgba(55,108,166,0.14),transparent_60%)] blur-3xl"
+                  animate={{ x: [0, -30, 30, -10, 0], y: [0, -15, 25, -10, 0], scale: [1, 0.96, 1.05, 0.99, 1] }}
+                  transition={{ duration: 20, repeat: Infinity, ease: 'easeInOut' }}
+                />
+                <div className="absolute top-4 right-4 z-40 flex items-center gap-3">
+                  {hasGeneratedSummary && (
+                    <>
+                      <div className="group relative">
+                        <button
+                          onClick={handleCopyContent}
+                          className={`flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-700 transition hover:bg-slate-100 hover:text-slate-900 dark:border-white/15 dark:bg-slate-900/80 dark:text-foreground/80 dark:hover:bg-slate-800 dark:hover:text-foreground ${summary ? '' : 'cursor-not-allowed text-gray-400'}`}
+                          disabled={!summary}
+                        >
+                          {isCopied ? <CheckCircle className="w-4 h-4 text-green-500" /> : <Copy className="w-4 h-4" />}
+                          <span className="sr-only">Copy summary</span>
+                        </button>
+                        <span className="absolute -bottom-8 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-md bg-gray-900 px-2 py-1 text-xs text-gray-100 opacity-0 transition-opacity group-hover:opacity-100 pointer-events-none">
+                          Copy Content
+                        </span>
+                      </div>
+
+                      <div className="group relative">
+                        <button
+                          className={`flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-700 transition hover:bg-slate-100 hover:text-slate-900 dark:border-white/15 dark:bg-slate-900/80 dark:text-foreground/80 dark:hover:bg-slate-800 dark:hover:text-foreground ${summary ? '' : 'cursor-not-allowed text-gray-400'}`}
+                          onClick={handleDownloadPDF}
+                          disabled={!summary}
+                        >
+                          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20"
+                            viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+                            strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                            <polyline points="7 10 12 15 17 10" />
+                            <line x1="12" y1="15" x2="12" y2="3" />
+                          </svg>
+                        </button>
+                        <span className="absolute -bottom-8 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-md bg-gray-900 px-2 py-1 text-xs text-gray-100 opacity-0 transition-opacity group-hover:opacity-100 pointer-events-none">
+                          {summary ? 'Download PDF' : 'Generate summary first'}
+                        </span>
+                      </div>
+                    </>
+                  )}
+
+                  <button
+                    onClick={() => {
+                      setHasGeneratedSummary(false);
+                      setIsSummaryModalOpen(false);
+                    }}
+                    className="flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-700 shadow-xl transition hover:bg-slate-100 hover:text-slate-900 dark:border-white/20 dark:bg-slate-900/90 dark:text-slate-200 dark:hover:bg-slate-800 dark:hover:text-white"
+                    aria-label="Close summary modal"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <line x1="18" y1="6" x2="6" y2="18" />
+                      <line x1="6" y1="6" x2="18" y2="18" />
+                    </svg>
+                  </button>
+                </div>
+                <AnimatePresence>
                 {isTranscribing && (
                   <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-                    className="fixed inset-0 z-[999] bg-background/90 backdrop-blur-sm flex items-center justify-center">
+                    className="absolute inset-0 z-[45] bg-background/85 backdrop-blur-sm flex items-center justify-center">
                     <motion.div initial={{ scale: 0.9 }} animate={{ scale: 1 }}
                       className="flex items-center gap-3 text-muted-foreground bg-card px-6 py-4 rounded-lg shadow-lg">
                       <div className="flex space-x-1">
@@ -475,50 +543,9 @@ export default function TranscribePage() {
                 )}
               </AnimatePresence>
 
-              <div className="p-6 border-b border-border flex items-center justify-between">
-                <h3 className="text-xl font-semibold text-foreground">
-                  {hasGeneratedSummary ? "Document Preview" : "Generate Summary"}
-                </h3>
-
-                {hasGeneratedSummary && (
-                  <div className="flex items-center gap-2">
-                    <div className="group relative">
-                      <button
-                        onClick={handleCopyContent}
-                        className={`p-2 rounded-lg transition-colors ${summary ? 'hover:bg-accent text-foreground/80 hover:text-foreground' : 'text-gray-400 cursor-not-allowed'}`}
-                        disabled={!summary}
-                      >
-                        {isCopied ? <CheckCircle className="w-5 h-5 text-green-500" /> : <Copy className="w-5 h-5 text-gray-500" />}
-                        <span className="sr-only">Copy summary</span>
-                      </button>
-                      <span className="absolute -bottom-8 left-1/2 -translate-x-1/2 bg-gray-900 text-gray-100 text-xs px-2 py-1 rounded-md opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap">
-                        Copy Content
-                      </span>
-                    </div>
-
-                    <div className="group relative">
-                      <button
-                        className={`p-2 rounded-lg transition-colors ${summary ? 'hover:bg-accent text-foreground/80 hover:text-foreground' : 'text-gray-400 cursor-not-allowed'}`}
-                        onClick={handleDownloadPDF}
-                        disabled={!summary}
-                      >
-                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24"
-                          viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
-                          strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5">
-                          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                          <polyline points="7 10 12 15 17 10" />
-                          <line x1="12" y1="15" x2="12" y2="3" />
-                        </svg>
-                      </button>
-                      <span className="absolute -bottom-8 left-1/2 -translate-x-1/2 bg-gray-900 text-gray-100 text-xs px-2 py-1 rounded-md opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap">
-                        {summary ? 'Download PDF' : 'Generate summary first'}
-                      </span>
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              <div className="p-6 max-h-[70vh] overflow-y-auto">
+              <div
+                className={`relative w-full p-8 bg-transparent ${hasGeneratedSummary || isCustomPanelOpen ? 'max-h-[80vh] overflow-y-auto' : 'overflow-hidden'}`}
+              >
                 <ErrorBoundary
                   FallbackComponent={({ error }) => (
                     <div className="text-destructive bg-destructive/10 text-sm p-3 rounded-lg">
@@ -531,21 +558,11 @@ export default function TranscribePage() {
                     summary={summary}
                     onSummaryGenerated={() => setHasGeneratedSummary(true)}
                     setSummary={setSummary}
+                    onCustomOpenChange={setIsCustomPanelOpen}
                   />
                 </ErrorBoundary>
               </div>
-
-              <div className="p-4 border-t border-border flex justify-end gap-3">
-                <button
-                  onClick={() => {
-                    setHasGeneratedSummary(false);
-                    setIsSummaryModalOpen(false);
-                  }}
-                  className="px-4 py-2 bg-white/20 dark:bg-black/20 hover:bg-white/30 dark:hover:bg-black/30 text-black dark:text-white rounded-lg transition-colors"
-                >
-                  {hasGeneratedSummary ? 'Close' : 'Cancel'}
-                </button>
-              </div>
+            </div>
             </motion.div>
           </motion.div>
         )}
@@ -556,12 +573,19 @@ export default function TranscribePage() {
           className="flex flex-col items-center gap-8 p-8 bg-gradient-to-b from-dark to-gray-50 rounded-2xl shadow-sm "
           initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }}
         >
-          <h1 className="text-3xl font-bold bg-gradient-to-r from-cyan-500 to-blue-600 bg-clip-text text-transparent">
-            Upload Your Media
+          <h1 className="text-3xl font-bold text-slate-900 dark:text-white">
+            Ready to use Doc in minutes
           </h1>
           <p className="text-gray-400 text-center max-w-md">
             Upload your video or audio file to transcribe and summarize its content
           </p>
+
+          <div className="w-full max-w-2xl">
+            <div className="flex justify-center">
+              <DropzoneComponent />
+            </div>
+            
+          </div>
 
           <AnimatePresence>
             {error && (
@@ -579,20 +603,6 @@ export default function TranscribePage() {
             )}
           </AnimatePresence>
 
-          <div className="max-w-lg">
-            <DropzoneComponent />
-          </div>
-
-          <div className="mt-4 text-sm text-gray-400 flex items-center gap-2">
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16"
-              viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
-              strokeLinecap="round" strokeLinejoin="round">
-              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-              <polyline points="7 10 12 15 17 10" />
-              <line x1="12" y1="15" x2="12" y2="3" />
-            </svg>
-            <span>Supported formats: MP4, MP3, WAV, AAC</span>
-          </div>
         </motion.div>
       ) : (
         <motion.div
@@ -674,7 +684,7 @@ export default function TranscribePage() {
                         if (transcriptionLimit.remainingMinutes > 0 && usagePercentage > 80) {
                           return (
                             <div className="mt-2 text-xs text-amber-600 dark:text-amber-400">
-                              ⚠️ This will use {usagePercentage.toFixed(0)}% of your remaining minutes
+                              Warning: This will use {usagePercentage.toFixed(0)}% of your remaining minutes
                             </div>
                           );
                         }
@@ -729,7 +739,7 @@ export default function TranscribePage() {
                         <p className="mt-1">
                           Your audio is {parseAudioDuration(duration).toFixed(1)} minutes, but you only have {transcriptionLimit.remainingMinutes.toFixed(1)} minutes remaining.
                         </p>
-                        <p className="mt-2 text-xs">💡 Try uploading a shorter audio file or upgrade your plan for more minutes.</p>
+                        <p className="mt-2 text-xs">Tip: Try uploading a shorter audio file or upgrade your plan for more minutes.</p>
                       </div>
                     </div>
                   )}

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useCallback, useEffect } from "react";
-import { AudioWaveform, Crown, CheckCircle, XCircle } from "lucide-react";
+import { AudioWaveform, Crown, CheckCircle, XCircle, Timer, Activity } from "lucide-react";
 import { useDropzone } from "react-dropzone";
 import { useFileStore } from "../store";
 import { useRouter } from "next/navigation";
@@ -53,7 +53,7 @@ export default function Dropzone() {
             setPlanDetails(plan);
             setUploadLimit(plan.upload_limit_mb);
           } else {
-            // No active subscription → fallback Free Plan
+            // No active subscription -> fallback Free Plan
             setPlanDetails({
               name: "Free Plan",
               upload_limit_mb: 50,
@@ -83,7 +83,7 @@ export default function Dropzone() {
           const lim: LimitResponse = await limitsRes.json();
           setRemainingMinutes(lim.remainingMinutes);
         } else if (limitsRes.status === 401 || limitsRes.status === 403) {
-          // Not signed in or no subscription → treat as 0 mins remaining
+          // Not signed in or no subscription -> treat as 0 mins remaining
           setRemainingMinutes(0);
         } else {
           setRemainingMinutes(null); // unknown
@@ -159,15 +159,18 @@ export default function Dropzone() {
     }
 
     return (
-      <div className="mb-4 p-4 rounded-lg border shadow-sm bg-white text-slate-700 dark:bg-gray-900/60 dark:border-gray-700/60 dark:text-gray-200">
+      <div className="mb-4 w-full max-w-xl rounded-2xl border border-white/15 bg-white/10 px-5 py-5 text-slate-900 shadow-xl backdrop-blur dark:border-gray-700/60 dark:bg-gray-900/60 dark:text-gray-100">
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-2">
             {planDetails.name === "Free Plan" ? (
-              <AudioWaveform className="w-5 h-5 text-cyan-500 dark:text-gray-400" />
+              <AudioWaveform className="w-5 h-5 text-cyan-500 dark:text-gray-300" />
             ) : (
               <Crown className="w-5 h-5 text-yellow-400" />
             )}
-            <h3 className="font-semibold text-slate-900 dark:text-gray-100">{planDetails.name}</h3>
+            <div>
+              <h3 className="font-semibold">{planDetails.name}</h3>
+              <p className="text-xs text-slate-600 dark:text-gray-400">Subscription</p>
+            </div>
           </div>
           {planDetails.billing_interval && (
             <span className="text-xs bg-cyan-100 text-cyan-700 dark:bg-cyan-900/50 dark:text-cyan-300 px-2 py-1 rounded-full border border-cyan-200 dark:border-cyan-700/50">
@@ -177,49 +180,27 @@ export default function Dropzone() {
         </div>
 
         <div className="grid grid-cols-1 gap-2 text-sm">
-          <div className="flex items-center justify-between">
-            <span className="text-slate-500 dark:text-gray-400">Upload Limit:</span>
-            <span className="font-medium text-slate-900 dark:text-gray-100">
-              {planDetails.upload_limit_mb}MB
+          <div className="flex items-center justify-between rounded-lg bg-white/5 px-3 py-2 dark:bg-white/5">
+            <div className="flex items-center gap-2 text-slate-600 dark:text-gray-400">
+              <Timer className="w-4 h-4 text-cyan-500" />
+              <span>Transcription</span>
+            </div>
+            <span className="font-semibold text-cyan-200">
+              {planDetails.transcription_mins > 0 ? `${planDetails.transcription_mins} mins` : "Not available"}
             </span>
           </div>
-
-          <div className="flex items-center justify-between">
-            <span className="text-slate-500 dark:text-gray-400">Transcription Limit:</span>
-            <span className="font-medium text-slate-900 dark:text-gray-100">
-              {planDetails.transcription_mins > 0
-                ? `${planDetails.transcription_mins} mins`
-                : "Not available"}
-            </span>
-          </div>
-
-          {/* NEW: Remaining minutes (from /api/transcription/limits) */}
-          {/* <div className="flex items-center justify-between">
-            <span className="text-gray-400">Remaining Times:</span>
-            <span className="font-medium text-gray-200">
-              {remainingMinutes == null ? "—" : `${remainingMinutes.toFixed(1)} mins`}
-            </span>
-          </div> */}
 
           {remainingMinutes != null && remainingMinutes > 0 && (
-            <div className="flex items-center justify-between">
-              <span className="text-slate-500 dark:text-gray-400">Remaining Times:</span>
-              <span className="font-medium text-slate-900 dark:text-gray-100">
+            <div className="flex items-center justify-between rounded-lg bg-white/5 px-3 py-2 dark:bg-white/5">
+              <div className="flex items-center gap-2 text-slate-600 dark:text-gray-400">
+                <Activity className="w-4 h-4 text-emerald-400" />
+                <span>Remaining times</span>
+              </div>
+              <span className="font-semibold text-emerald-200">
                 {remainingMinutes.toFixed(1)} mins
               </span>
             </div>
           )}
-
-          <div className="flex items-center justify-between">
-            <span className="text-slate-500 dark:text-gray-400">Summaries:</span>
-            <span className="font-medium text-slate-900 dark:text-gray-100">
-              {planDetails.summarization_limit === null
-                ? "Unlimited"
-                : planDetails.summarization_limit > 0
-                ? `${planDetails.summarization_limit} PDFs`
-                : "Not available"}
-            </span>
-          </div>
         </div>
 
         {planDetails.name === "Free Plan" && (
@@ -236,8 +217,6 @@ export default function Dropzone() {
 
   return (
     <div className="space-y-4">
-      <PlanInfo />
-
       <div
         {...getRootProps()}
         className={`border-2 border-dashed p-10 rounded-lg text-center cursor-pointer transition flex flex-col items-center justify-center gap-4 w-96 h-48 bg-white text-slate-600 dark:bg-gray-900 dark:text-gray-200 ${
@@ -263,6 +242,19 @@ export default function Dropzone() {
           </div>
         )}
       </div>
+
+      <p className="mt-1 text-sm text-gray-500 dark:text-gray-400 text-center flex items-center justify-center gap-2">
+        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16"
+          viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+          strokeLinecap="round" strokeLinejoin="round">
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+          <polyline points="7 10 12 15 17 10" />
+          <line x1="12" y1="15" x2="12" y2="3" />
+        </svg>
+        <span>Supported formats: MP4, MP3, WAV, AAC</span>
+      </p>
+
+      <PlanInfo />
     </div>
   );
 }
