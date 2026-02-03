@@ -125,7 +125,7 @@ export default function BillingPage() {
   const canManagePaymentMethod = Boolean(autoRenewInfo && autoRenewInfo.status !== "none");
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-8 px-4 py-8 sm:px-6 lg:px-10">
       <div>
         <h1 className="text-3xl font-bold">Billing</h1>
         <p className="text-muted-foreground">Manage your subscription, renewal preferences, and saved payment method.</p>

@@ -449,7 +449,25 @@ export default function TranscribePage() {
   if (isUserLoading) return <div>Loading...</div>;
 
   return (
-    <div className="container mx-auto px-4 py-10 max-w-4xl">
+    <div className="relative min-h-screen overflow-hidden ">
+      {/* Background blobs */}
+      <motion.div
+        className="pointer-events-none absolute -left-28 top-10 h-96 w-96 rounded-full bg-[radial-gradient(circle_at_30%_30%,rgba(77,208,225,0.22),rgba(21,41,78,0.12),transparent_60%)] blur-3xl"
+        animate={{ x: [0, 50, -30, 20, 0], y: [0, 40, 10, -20, 0], scale: [1, 1.06, 0.95, 1.04, 1] }}
+        transition={{ duration: 22, repeat: Infinity, ease: "easeInOut" }}
+      />
+      <motion.div
+        className="pointer-events-none absolute right-[-15%] top-32 h-96 w-96 rounded-full bg-[radial-gradient(circle_at_70%_70%,rgba(122,229,130,0.2),rgba(55,108,166,0.14),transparent_60%)] blur-3xl"
+        animate={{ x: [0, -40, 30, -15, 0], y: [0, -25, 35, -18, 0], scale: [1, 0.94, 1.08, 0.98, 1] }}
+        transition={{ duration: 24, repeat: Infinity, ease: "easeInOut" }}
+      />
+      <motion.div
+        className="pointer-events-none absolute left-1/3 bottom-0 h-72 w-72 rotate-12 bg-gradient-to-r from-cyan-400/15 via-blue-500/12 to-teal-400/15 blur-[90px]"
+        animate={{ scale: [1, 1.08, 0.96, 1.05, 1], rotate: [8, 12, 6, 10, 8] }}
+        transition={{ duration: 26, repeat: Infinity, ease: "easeInOut" }}
+      />
+
+      <div className="container relative z-10 mx-auto max-w-4xl px-4 py-10">
       {/* Summary Modal */}
       <AnimatePresence>
         {isSummaryModalOpen && (
@@ -829,6 +847,7 @@ export default function TranscribePage() {
           </div>
         </motion.div>
       )}
+      </div>
     </div>
   );
 }

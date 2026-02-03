@@ -30,7 +30,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
          <Navbar /> 
          
         {/* Page Content */}
-        <main className="container mx-auto p-6">{children}</main>
+        <main className="container mx-auto">{children}</main>
         <Toaster richColors position="top-center" />
         </Providers>
         
