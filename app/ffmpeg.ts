@@ -36,9 +36,8 @@ export const convertVideoToAudio = async (file: File): Promise<Blob> => {
   const outputFileName = `output-${Date.now()}.mp3`;
 
   try {
-    // Reset store states
+    // Reset store states (leave isConverting control to caller)
     useFileStore.getState().setError(null);
-    useFileStore.getState().setIsConverting(true);
     useFileStore.getState().setConversionProgress(0);
 
     // Write input file to FFmpeg
@@ -47,10 +46,12 @@ export const convertVideoToAudio = async (file: File): Promise<Blob> => {
     // Execute conversion command
     await ffmpeg.exec([
       '-i', inputFileName,
-      '-vn',              // Disable video
+      '-vn',                  // Disable video stream
       '-acodec', 'libmp3lame', // MP3 codec
-      '-q:a', '2',        // Audio quality (0-9, 0=best)
-      '-y',               // Overwrite output
+      '-ac', '1',             // Mono to cut size
+      '-ar', '16000',         // 16 kHz sample rate
+      '-b:a', '24k',          // Target ~24 kbps for small output
+      '-y',                   // Overwrite output
       outputFileName
     ]);
 
@@ -67,6 +68,5 @@ export const convertVideoToAudio = async (file: File): Promise<Blob> => {
     useFileStore.getState().setError('Conversion failed. Please try again.');
     throw error;
   } finally {
-    useFileStore.getState().setIsConverting(false);
   }
 };
