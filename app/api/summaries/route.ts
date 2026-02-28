@@ -1,7 +1,13 @@
 import { NextResponse } from 'next/server';
-import { createServerClient } from '@supabase/ssr';
+import { createServerClient, type CookieOptions } from '@supabase/ssr';
 import { cookies } from 'next/headers';
 import { ensureActiveSubscription } from '@/app/lib/subscriptionHelpers';
+
+type CookieToSet = {
+  name: string;
+  value: string;
+  options?: CookieOptions;
+};
 
 export async function GET() {
   try {
@@ -14,7 +20,7 @@ export async function GET() {
             const cookieStore =await cookies();
             return cookieStore.getAll();
           },
-          async setAll(cookiesToSet) {
+          async setAll(cookiesToSet: CookieToSet[]) {
             const cookieStore =await cookies();
             try {
               cookiesToSet.forEach(({ name, value, options }) =>

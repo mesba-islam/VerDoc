@@ -1,8 +1,14 @@
 import { NextResponse } from 'next/server';
 import OpenAI from 'openai';
 import type { SummaryConfig } from '@/app/types';
-import { createServerClient } from '@supabase/ssr';
+import { createServerClient, type CookieOptions } from '@supabase/ssr';
 import { cookies } from 'next/headers';
+
+type CookieToSet = {
+  name: string;
+  value: string;
+  options?: CookieOptions;
+};
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -180,7 +186,7 @@ export async function POST(request: Request) {
             const cookieStore = await cookies();
             return cookieStore.getAll();
           },
-          async setAll(cookiesToSet) {
+          async setAll(cookiesToSet: CookieToSet[]) {
             const cookieStore = await cookies();
             try {
               cookiesToSet.forEach(({ name, value, options }) =>

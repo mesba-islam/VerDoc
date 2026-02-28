@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import { Analytics } from "@vercel/analytics/react";
 import "./globals.css";
 import Navbar from "./components/Navbar";
 import { Providers } from './providers';
@@ -32,6 +33,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         {/* Page Content */}
         <main className="container mx-auto">{children}</main>
         <Toaster richColors position="top-center" />
+        <Analytics />
         </Providers>
         
       </body>
