@@ -88,7 +88,7 @@ export const generateSummaryPDF = (
 
   let cursorY = 18;
   const headerLineHeight = headerFontSize * 0.7;
-  headerLines.forEach((line) => {
+  headerLines.forEach((line: string) => {
     doc.text(line, pageWidth / 2, cursorY, { align: "center" });
     cursorY += headerLineHeight;
   });
@@ -131,7 +131,7 @@ export const generateSummaryPDF = (
 
     doc.setFont("helvetica", "normal");
     const wrapped = doc.splitTextToSize(rest, available);
-    wrapped.forEach((part, idx) => {
+    wrapped.forEach((part: string, idx: number) => {
       if (idx === 0) {
         doc.text(part, x + labelWidth + 2, y);
       } else {
@@ -150,7 +150,7 @@ export const generateSummaryPDF = (
     doc.setFont("helvetica", bold ? "bold" : "normal");
     doc.setFontSize(12);
     const wrapped = doc.splitTextToSize(text, pageWidth - margin * 2);
-    wrapped.forEach((part) => {
+    wrapped.forEach((part: string) => {
       ensureSpace(lineHeight);
       doc.text(part, margin, y);
       y += lineHeight;
@@ -176,7 +176,7 @@ export const generateSummaryPDF = (
     doc.setFillColor(77, 208, 225);
     doc.setDrawColor(77, 208, 225);
     doc.circle(margin, y - 2, 1.6, "F");
-    wrapped.forEach((part, idx) => {
+    wrapped.forEach((part: string, idx: number) => {
       if (y > maxY) {
         doc.addPage();
         y = margin;

@@ -22,6 +22,15 @@ type SubscriptionRow = {
   ends_at: string | null;
 };
 
+type PaddleSubscriptionResponse = {
+  data?: {
+    current_billing_period?: {
+      starts_at?: string | null;
+      ends_at?: string | null;
+    } | null;
+  } | null;
+} | null;
+
 async function callPaddle(path: string, init: RequestInit) {
   if (!PADDLE_API_KEY) throw new Error("PADDLE_API_KEY is not set");
   const response = await fetch(`${PADDLE_API_URL}${path}`, {
@@ -117,7 +126,7 @@ export async function POST(req: Request) {
   ];
 
   try {
-    let paddleResp: any;
+    let paddleResp: PaddleSubscriptionResponse = null;
     if (proration === "next_billing_period") {
       // Schedule the change at renewal using dedicated endpoint
       paddleResp = await callPaddle(

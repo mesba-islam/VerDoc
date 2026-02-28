@@ -77,7 +77,7 @@ export default function ArchivePage() {
         alert(payload?.error || 'Export limit reached. Upgrade to continue.');
         return;
       }
-    } catch (e) {
+    } catch {
       alert('Unable to record export. Please try again.');
       return;
     }

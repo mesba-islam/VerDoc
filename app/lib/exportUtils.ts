@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { ensureActiveSubscription, type PlanRow } from "@/app/lib/subscriptionHelpers";
+import { ensureActiveSubscription } from "@/app/lib/subscriptionHelpers";
 
 function assertIsSupabaseClient(x: unknown): asserts x is SupabaseClient {
   const ok = !!x && typeof (x as SupabaseClient).auth?.getUser === "function";
@@ -15,11 +15,6 @@ export type ExportLimitResult = {
   billingInterval: string | null;
   periodStart?: string;
   periodEnd?: string;
-};
-
-type ExportUsageRow = {
-  quantity?: number | null;
-  created_at: string;
 };
 
 const toNumber = (v: number | string | null | undefined) => (v === null || v === undefined ? null : Number(v));
@@ -125,4 +120,3 @@ export async function recordExportUsage(
   const updatedLimits = await checkExportLimit(supabase, userId);
   return { success: true, updatedLimits };
 }
-

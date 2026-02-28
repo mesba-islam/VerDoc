@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { ensureActiveSubscription, type PlanRow, type SubscriptionRow } from "@/app/lib/subscriptionHelpers";
+import { ensureActiveSubscription } from "@/app/lib/subscriptionHelpers";
 
 function assertIsSupabaseClient(x: unknown): asserts x is SupabaseClient {
   const ok = !!x && typeof (x as SupabaseClient).auth?.getUser === "function";
