@@ -12,9 +12,17 @@ interface Summary {
   created_at: string;
 }
 
+type PlanInfo = {
+  name: string;
+  archive_access?: boolean | null;
+  premium_templates?: boolean | null;
+  doc_export_limit?: number | null;
+};
+
 export default function ArchivePage() {
   const [summaries, setSummaries] = useState<Summary[]>([]);
   const [loading, setLoading] = useState(true);
+  const [plan, setPlan] = useState<PlanInfo | null>(null);
   const supabase = useMemo(() => createSupabaseBrowser(), []);
 
   useEffect(() => {
@@ -26,6 +34,20 @@ export default function ArchivePage() {
         if (!user) {
           window.location.href = '/login';
           return;
+        }
+
+        const planRes = await fetch('/api/user/plan', { credentials: 'include' });
+        if (planRes.status === 401) {
+          window.location.href = '/login';
+          return;
+        }
+        if (planRes.ok) {
+          const planData = await planRes.json();
+          setPlan(planData?.plan ?? null);
+          if (!planData?.plan?.archive_access) {
+            setSummaries([]);
+            return;
+          }
         }
 
         const response = await fetch('/api/summaries');
@@ -43,12 +65,39 @@ export default function ArchivePage() {
     fetchSummaries();
   }, [supabase]);
 
-  const handleDownload = (content: string, title: string) => {
+  const handleDownload = async (content: string, title: string, summaryId?: string) => {
+    try {
+      const res = await fetch('/api/exports/record', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ count: 1, summaryId }),
+      });
+      const payload = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        alert(payload?.error || 'Export limit reached. Upgrade to continue.');
+        return;
+      }
+    } catch (e) {
+      alert('Unable to record export. Please try again.');
+      return;
+    }
+
     const date = new Date().toLocaleDateString();
     generateSummaryPDF(title, content, date);
   };
 
   if (loading) return <div className="text-center p-8">Loading summaries...</div>;
+
+  if (plan && !plan.archive_access) {
+    return (
+      <div className="max-w-xl mx-auto p-6 text-center space-y-4">
+        <h1 className="text-2xl font-bold">Archive requires Pro or Power</h1>
+        <p className="text-muted-foreground">
+          Upgrade to unlock saved summaries and unlimited document downloads.
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-4xl mx-auto p-4">
@@ -83,7 +132,7 @@ export default function ArchivePage() {
                     className={`p-2 rounded-lg transition-colors group-hover:text-cyan-500 transition-colors duration-300${
                       summary ? 'hover:bg-accent text-foreground/80 hover:text-foreground' : 'text-gray-400 cursor-not-allowed'
                     }`}
-                    onClick={() => handleDownload(summary.content, summary.title)}
+                    onClick={() => handleDownload(summary.content, summary.title, summary.id)}
                   >
                     <svg
                       xmlns="http://www.w3.org/2000/svg"

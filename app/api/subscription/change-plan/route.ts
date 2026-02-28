@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createSupabaseServer } from "@/lib/supabase/server";
 import supabaseAdmin from "@/lib/supabase/admin";
+import { ensureActiveSubscription } from "@/app/lib/subscriptionHelpers";
 
 const PADDLE_API_URL = process.env.PADDLE_API_URL ?? "https://api.paddle.com";
 const PADDLE_API_KEY = process.env.PADDLE_API_KEY;
@@ -17,6 +18,8 @@ type SubscriptionRow = {
   plan_id: string | null;
   paddle_subscription_id: string | null;
   status: string;
+  starts_at: string | null;
+  ends_at: string | null;
 };
 
 async function callPaddle(path: string, init: RequestInit) {
@@ -42,9 +45,10 @@ async function callPaddle(path: string, init: RequestInit) {
 async function getActiveSubscriptionForUser(userId: string) {
   const { data, error } = await supabaseAdmin
     .from("subscriptions")
-    .select("id, plan_id, paddle_subscription_id, status")
+    .select("id, plan_id, paddle_subscription_id, status, starts_at, ends_at")
     .eq("user_id", userId)
     .eq("status", "active")
+    .not("paddle_subscription_id", "is", null)
     .limit(1)
     .maybeSingle<SubscriptionRow>();
 
@@ -86,6 +90,8 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  await ensureActiveSubscription(user.id);
+
   // Find the active subscription we will amend
   const subscription = await getActiveSubscriptionForUser(user.id);
   if (!subscription || !subscription.paddle_subscription_id) {
@@ -111,7 +117,7 @@ export async function POST(req: Request) {
   ];
 
   try {
-    let paddleResp: unknown;
+    let paddleResp: any;
     if (proration === "next_billing_period") {
       // Schedule the change at renewal using dedicated endpoint
       paddleResp = await callPaddle(
@@ -140,9 +146,22 @@ export async function POST(req: Request) {
 
     // Optimistically update local plan_id for immediate UX; webhook will keep source of truth
     if (planId) {
+      // Try to pick up the current billing window from Paddle response
+      const startISO = paddleResp?.data?.current_billing_period?.starts_at
+        ? new Date(paddleResp.data.current_billing_period.starts_at).toISOString()
+        : subscription.starts_at;
+      const endISO = paddleResp?.data?.current_billing_period?.ends_at
+        ? new Date(paddleResp.data.current_billing_period.ends_at).toISOString()
+        : subscription.ends_at;
+
       await supabaseAdmin
         .from("subscriptions")
-        .update({ plan_id: planId, updated_at: new Date().toISOString() })
+        .update({
+          plan_id: planId,
+          starts_at: startISO ?? subscription.starts_at,
+          ends_at: endISO ?? subscription.ends_at,
+          updated_at: new Date().toISOString(),
+        })
         .eq("id", subscription.id);
     }
 

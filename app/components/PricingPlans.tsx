@@ -21,7 +21,7 @@ export function PricingPlans() {
 
   // Separate free and paid plans
   const freePlan = plans.find(plan => plan.name === 'Free');
-  const paidPlans = plans.filter(plan => plan.billing_interval !== null);
+  const paidPlans = plans.filter(plan => plan.billing_interval !== null && plan.name !== 'Free');
 
   useEffect(() => {
     const initializePaddle = async () => {
@@ -53,10 +53,7 @@ export function PricingPlans() {
         .order('upload_limit_mb');
 
       if (!error && data) {
-        const validPlans = data.filter(plan => 
-          plan.paddle_price_id && plan.paddle_price_id.startsWith('pri_')
-        );
-        setPlans(validPlans);
+        setPlans(data as SubscriptionPlan[]);
       }
       setLoading(false);
     };
@@ -110,7 +107,7 @@ export function PricingPlans() {
 
             <div className="flex-1 space-y-3 mb-6">
               <PlanFeature 
-                label={`Upload Limit: ${freePlan.upload_limit_mb}MB`}
+                label={`Upload Limit: ${freePlan.upload_limit_mb >= 1024 ? `${(freePlan.upload_limit_mb/1024).toFixed(1)} GB` : `${freePlan.upload_limit_mb} MB`}`}
                 valid={freePlan.upload_limit_mb > 0}
               />
               <PlanFeature 
@@ -122,17 +119,16 @@ export function PricingPlans() {
                 valid={freePlan.transcription_mins > 0}
               />
               <PlanFeature 
-                label={`Executive Summary: ${
-                  freePlan.summarization_limit === null 
-                    ? 'Unlimited' 
-                    : (freePlan.summarization_limit > 0 
-                        ? freePlan.summarization_limit 
-                        : 'Not available')
-                }`}
-                valid={
-                  freePlan.summarization_limit === null || 
-                  freePlan.summarization_limit > 0
-                }
+                label={`Exports: ${freePlan.doc_export_limit === null ? 'Unlimited' : `${freePlan.doc_export_limit} per month`}`}
+                valid={freePlan.doc_export_limit === null || (freePlan.doc_export_limit ?? 0) > 0}
+              />
+              <PlanFeature 
+                label="Premium Templates"
+                valid={Boolean(freePlan.premium_templates)}
+              />
+              <PlanFeature 
+                label="Archive Access"
+                valid={Boolean(freePlan.archive_access)}
               />
             </div>
 
@@ -153,18 +149,18 @@ export function PricingPlans() {
             <div 
               key={plan.id}
               className={`relative border rounded-xl p-6 shadow-lg hover:shadow-xl transition-shadow ${
-                plan.name === 'Starter' ? 'border-2 border-primary' : 'border-border'  // Changed to Starter
+                plan.name === 'Pro' ? 'border-2 border-primary' : 'border-border'
               }`}
             >
-              {plan.name === 'Starter' && (  // Changed from Pro to Starter
+              {plan.name === 'Pro' && (
                 <div className="absolute top-0 right-0 bg-primary text-primary-foreground px-4 py-1 rounded-bl-xl rounded-tr-xl text-sm font-semibold">
-                Most Popular
-              </div>
+                  Most Popular
+                </div>
               )}
               
               <h3 className="text-2xl font-bold mb-2">{plan.name}</h3>
               <p className="text-muted-foreground mb-4">
-                {plan.name === 'Starter' ? 'Most popular choice' : 'Advanced features'}
+                {plan.name === 'Pro' ? 'Most popular choice' : 'Maximum capacity and access'}
               </p>
 
               <div className="mb-6">
@@ -173,7 +169,7 @@ export function PricingPlans() {
               </div>
                 <div className="flex-1 space-y-3 mb-6">
                   <PlanFeature 
-                    label={`Upload Limit: ${plan.upload_limit_mb}MB`}
+                    label={`Upload Limit: ${plan.upload_limit_mb >= 1024 ? `${(plan.upload_limit_mb/1024).toFixed(1)} GB` : `${plan.upload_limit_mb} MB`}`}
                     valid={plan.upload_limit_mb > 0}
                   />
                   <PlanFeature 
@@ -181,12 +177,20 @@ export function PricingPlans() {
                     valid={true}
                   />
                   <PlanFeature 
-                    label={`Transcription: ${plan.transcription_mins > 0 ? `${plan.transcription_mins} mins` : 'Not available'}`}
+                    label={`Transcription: ${plan.transcription_mins >= 60 ? `${(plan.transcription_mins/60).toFixed(0)} hrs / month` : `${plan.transcription_mins} mins`}`}
                     valid={plan.transcription_mins > 0}
                   />
                   <PlanFeature 
-                    label={`Executive Summary: ${plan.summarization_limit === null ? 'Unlimited' : (plan.summarization_limit > 0 ? plan.summarization_limit : 'Not available')} pdf`}
-                    valid={plan.summarization_limit === null || plan.summarization_limit > 0}
+                    label={`Exports: ${plan.doc_export_limit === null ? 'Unlimited' : `${plan.doc_export_limit} per month`}`}
+                    valid={plan.doc_export_limit === null || (plan.doc_export_limit ?? 0) > 0}
+                  />
+                  <PlanFeature 
+                    label="Premium Templates"
+                    valid={Boolean(plan.premium_templates)}
+                  />
+                  <PlanFeature 
+                    label="Archive Access"
+                    valid={Boolean(plan.archive_access)}
                   />
                 </div>
 
@@ -194,7 +198,7 @@ export function PricingPlans() {
                 priceId={plan.paddle_price_id}
                 isPaddleReady={paddleInitialized}
                 price={`$${plan.price}/${plan.billing_interval}`}
-                isStarter={plan.name === 'Starter'}
+                isStarter={plan.name === 'Pro'}
                 planId={plan.id}
                 planName={plan.name}
                 planPrice={plan.price}

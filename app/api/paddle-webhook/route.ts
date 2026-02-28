@@ -294,13 +294,21 @@ export async function POST(req: Request) {
       case "subscription.updated": {
         if (!paddleSubscriptionId) return NextResponse.json({ ok: true });
         const planId = await resolvePlanId(data);
-        if (planId) {
-          const { error } = await supabaseAdmin
-            .from("subscriptions")
-            .update({ plan_id: planId, updated_at: new Date().toISOString() })
-            .eq("paddle_subscription_id", paddleSubscriptionId);
-          if (error) throw error;
-        }
+        const startsAt = toISO(data.current_billing_period?.starts_at);
+        const endsAt = toISO(data.current_billing_period?.ends_at);
+
+        const updates: Record<string, unknown> = {
+          updated_at: new Date().toISOString(),
+        };
+        if (planId) updates.plan_id = planId;
+        if (startsAt) updates.starts_at = startsAt;
+        if (endsAt) updates.ends_at = endsAt;
+
+        const { error } = await supabaseAdmin
+          .from("subscriptions")
+          .update(updates)
+          .eq("paddle_subscription_id", paddleSubscriptionId);
+        if (error) throw error;
         return NextResponse.json({ ok: true });
       }
 

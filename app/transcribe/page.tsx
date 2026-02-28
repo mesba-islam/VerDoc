@@ -1,5 +1,5 @@
 "use client";
-import { generateTitleFromSummary } from '@/app/lib/summaryUtils';
+import { generateTitleFromSummaryByTemplate } from '@/app/lib/summaryUtils';
 import { useEffect, useState, useRef, useCallback } from "react";
 import type { RefObject } from "react";
 import { motion, AnimatePresence } from "framer-motion";
@@ -12,6 +12,7 @@ import { ErrorBoundary } from 'react-error-boundary';
 import { generateSummaryPDF } from '@/app/generatePdf';
 import useUser from '@/app/hook/useUser';
 import { cn } from "@/lib/utils";
+import { useSubscriptionPlan } from "@/app/hook/useSubscriptionPlan";
 
 type LimitResponse = {
   canTranscribe: boolean;
@@ -35,6 +36,13 @@ type RecordResponse = {
     remainingMinutes: number;
     billingInterval: string | null;
   };
+};
+
+type ExportLimitResponse = {
+  canExport: boolean;
+  message: string;
+  remainingExports: number | null;
+  planLimit: number | null;
 };
 
 type TranscriptSegment = {
@@ -149,6 +157,7 @@ const formatTimestamp = (seconds: number): string => {
 
 export default function TranscribePage() {
   const { data: user, isLoading: isUserLoading } = useUser();
+  const { data: activePlan } = useSubscriptionPlan(Boolean(user?.id));
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
   const [transcriptionLimit, setTranscriptionLimit] = useState<LimitResponse>({
@@ -163,8 +172,15 @@ export default function TranscribePage() {
   const [isSummaryModalOpen, setIsSummaryModalOpen] = useState(false);
   const [hasGeneratedSummary, setHasGeneratedSummary] = useState(false);
   const [summary, setSummary] = useState('');
+  const [summaryTemplate, setSummaryTemplate] = useState<string | null>(null);
   const [isCopied, setIsCopied] = useState(false);
   const [isCustomPanelOpen, setIsCustomPanelOpen] = useState(false);
+  const [exportLimit, setExportLimit] = useState<ExportLimitResponse>({
+    canExport: false,
+    message: 'Loading export limits...',
+    remainingExports: null,
+    planLimit: null,
+  });
 
   const {
     file,
@@ -236,6 +252,27 @@ export default function TranscribePage() {
   }, [user]);
 
   useEffect(() => {
+    const run = async () => {
+      if (!user?.id) return;
+      try {
+        const res = await fetch('/api/exports/limits', { credentials: 'include' });
+        if (!res.ok) throw new Error(`exports: ${res.status}`);
+        const data: ExportLimitResponse = await res.json();
+        setExportLimit(data);
+      } catch (e) {
+        console.error('Error checking export limits:', e);
+        setExportLimit({
+          canExport: false,
+          message: 'Error checking export limits',
+          remainingExports: null,
+          planLimit: null,
+        });
+      }
+    };
+    run();
+  }, [user]);
+
+  useEffect(() => {
     segmentRefs.current = [];
     if (segments && segments.length > 0) {
       setActiveSegmentIndex(0);
@@ -246,6 +283,10 @@ export default function TranscribePage() {
 
   const handleTranscription = async () => {
     if (!audioBlob || !user?.id || !duration) return;
+    if (exportLimit.planLimit !== null && (exportLimit.remainingExports ?? 0) <= 0) {
+      setError('You have used all your document exports for this period. Upgrade to continue transcribing.');
+      return;
+    }
 
     try {
       console.log("=== Starting transcription validation (server) ===");
@@ -422,11 +463,35 @@ export default function TranscribePage() {
     }
   };
 
-  const handleDownloadPDF = () => {
+  const handleDownloadPDF = async () => {
     if (!summary) return;
-    const { title, content } = generateTitleFromSummary(summary);
+
+    try {
+      const res = await fetch('/api/exports/record', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ count: 1 }),
+      });
+
+      const payload = await res.json().catch(() => ({}));
+
+      if (!res.ok) {
+        const msg = payload?.error || exportLimit.message || 'Unable to export PDF';
+        setError(msg);
+        if (payload?.updatedLimits) setExportLimit(payload.updatedLimits);
+        return;
+      }
+
+      if (payload?.updatedLimits) setExportLimit(payload.updatedLimits);
+    } catch (err) {
+      console.error('Export record error', err);
+      setError('Unable to record export. Please try again.');
+      return;
+    }
+
+    const { title, content } = generateTitleFromSummaryByTemplate(summary, summaryTemplate);
     const dateString = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
-    generateSummaryPDF(title, content, dateString);
+    generateSummaryPDF(title, content, dateString, { templateKey: summaryTemplate ?? undefined });
   };
 
   const handleReset = () => {
@@ -437,6 +502,7 @@ export default function TranscribePage() {
     setTranscript(null);
     setSegments(null);
     setSummary('');
+    setSummaryTemplate(null);
     setIsPlaying(false);
     setActiveSegmentIndex(null);
     segmentRefs.current = [];
@@ -493,6 +559,13 @@ export default function TranscribePage() {
                   transition={{ duration: 20, repeat: Infinity, ease: 'easeInOut' }}
                 />
                 <div className="absolute top-4 right-4 z-40 flex items-center gap-3">
+                  {exportLimit && (
+                    <span className="text-xs bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-200 px-3 py-1 rounded-full border border-slate-200/60 dark:border-white/10">
+                      {exportLimit.planLimit === null
+                        ? 'Exports: Unlimited'
+                        : `Exports left: ${exportLimit.remainingExports ?? 0}`}
+                    </span>
+                  )}
                   {hasGeneratedSummary && (
                     <>
                       <div className="group relative">
@@ -511,9 +584,9 @@ export default function TranscribePage() {
 
                       <div className="group relative">
                         <button
-                          className={`flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-700 transition hover:bg-slate-100 hover:text-slate-900 dark:border-white/15 dark:bg-slate-900/80 dark:text-foreground/80 dark:hover:bg-slate-800 dark:hover:text-foreground ${summary ? '' : 'cursor-not-allowed text-gray-400'}`}
-                          onClick={handleDownloadPDF}
-                          disabled={!summary}
+                          className={`flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-700 transition hover:bg-slate-100 hover:text-slate-900 dark:border-white/15 dark:bg-slate-900/80 dark:text-foreground/80 dark:hover:bg-slate-800 dark:hover:text-foreground ${(summary && exportLimit.canExport) ? '' : 'cursor-not-allowed text-gray-400'}`}
+                          onClick={() => { void handleDownloadPDF(); }}
+                          disabled={!summary || !exportLimit.canExport}
                         >
                           <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20"
                             viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
@@ -524,7 +597,11 @@ export default function TranscribePage() {
                           </svg>
                         </button>
                         <span className="absolute -bottom-8 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-md bg-gray-900 px-2 py-1 text-xs text-gray-100 opacity-0 transition-opacity group-hover:opacity-100 pointer-events-none">
-                          {summary ? 'Download PDF' : 'Generate summary first'}
+                          {summary
+                            ? exportLimit.canExport
+                              ? 'Download PDF'
+                              : 'Upgrade for more exports'
+                            : 'Generate summary first'}
                         </span>
                       </div>
                     </>
@@ -562,7 +639,7 @@ export default function TranscribePage() {
               </AnimatePresence>
 
               <div
-                className={`relative w-full p-8 bg-transparent ${hasGeneratedSummary || isCustomPanelOpen ? 'max-h-[80vh] overflow-y-auto' : 'overflow-hidden'}`}
+                className={`relative w-full max-h-[80vh] overflow-y-auto overscroll-contain bg-transparent p-8 pr-6 scrollbar-thin scrollbar-thumb-cyan-500/40 scrollbar-track-transparent ${isCustomPanelOpen ? 'pb-10' : ''}`}
               >
                 <ErrorBoundary
                   FallbackComponent={({ error }) => (
@@ -573,10 +650,15 @@ export default function TranscribePage() {
                 >
                   <SummaryGenerator
                     transcript={transcript || ''}
+                    segments={transcriptSegments}
                     summary={summary}
                     onSummaryGenerated={() => setHasGeneratedSummary(true)}
+                    onTemplateUsed={setSummaryTemplate}
                     setSummary={setSummary}
                     onCustomOpenChange={setIsCustomPanelOpen}
+                    canUsePremiumTemplates={Boolean(activePlan?.premium_templates)}
+                    allowCustom={Boolean(activePlan?.premium_templates)}
+                    activeTemplate={summaryTemplate}
                   />
                 </ErrorBoundary>
               </div>
@@ -716,7 +798,8 @@ export default function TranscribePage() {
                     disabled={
                       isTranscribing ||
                       !transcriptionLimit.canTranscribe ||
-                      (!!duration && parseAudioDuration(duration) > transcriptionLimit.remainingMinutes)
+                      (!!duration && parseAudioDuration(duration) > transcriptionLimit.remainingMinutes) ||
+                      (exportLimit.planLimit !== null && (exportLimit.remainingExports ?? 0) <= 0)
                     }
                     className="w-lg py-3 px-6 
                     bg-gradient-to-r from-cyan-400 to-gray-900 
@@ -737,6 +820,8 @@ export default function TranscribePage() {
                       <span>{transcriptionLimit.message}</span>
                     ) : duration && parseAudioDuration(duration) > transcriptionLimit.remainingMinutes ? (
                       <span>Audio too long for remaining minutes</span>
+                    ) : (exportLimit.planLimit !== null && (exportLimit.remainingExports ?? 0) <= 0) ? (
+                      <span>Upgrade for more exports</span>
                     ) : (
                       <>
                         <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28"
@@ -758,6 +843,17 @@ export default function TranscribePage() {
                           Your audio is {parseAudioDuration(duration).toFixed(1)} minutes, but you only have {transcriptionLimit.remainingMinutes.toFixed(1)} minutes remaining.
                         </p>
                         <p className="mt-2 text-xs">Tip: Try uploading a shorter audio file or upgrade your plan for more minutes.</p>
+                      </div>
+                    </div>
+                  )}
+
+                  {(exportLimit.planLimit !== null && (exportLimit.remainingExports ?? 0) <= 0) && (
+                    <div className="mt-3 p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 rounded-lg">
+                      <div className="text-sm text-amber-800 dark:text-amber-200">
+                        <p className="font-medium">Export limit reached</p>
+                        <p className="mt-1">
+                          Free plan allows 1 export per period. Upgrade to continue transcribing and downloading documents.
+                        </p>
                       </div>
                     </div>
                   )}

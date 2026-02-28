@@ -11,6 +11,9 @@ type ActivePlan = {
   billing_interval: string | null;
   paddle_price_id?: string | null;
   price?: number;
+  doc_export_limit?: number | null;
+  premium_templates?: boolean | null;
+  archive_access?: boolean | null;
 };
 
 type PlanResponse = {

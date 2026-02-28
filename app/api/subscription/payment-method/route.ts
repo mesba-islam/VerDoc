@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createSupabaseServer } from "@/lib/supabase/server";
 import supabaseAdmin from "@/lib/supabase/admin";
+import { ensureActiveSubscription } from "@/app/lib/subscriptionHelpers";
 
 const PADDLE_API_URL =
   process.env.NEXT_PUBLIC_PADDLE_ENV === "sandbox"
@@ -70,6 +71,8 @@ async function getActiveSubscriptionForUser(userId: string) {
     .from("subscriptions")
     .select("id, status, paddle_subscription_id")
     .eq("user_id", userId)
+    .in("status", ["active", "trialing"])
+    .not("paddle_subscription_id", "is", null)
     .order("ends_at", { ascending: false, nullsFirst: false })
     .limit(1)
     .maybeSingle<SubscriptionRow>();
@@ -98,6 +101,13 @@ export async function POST(req: Request) {
 
   if (error || !user?.id) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  try {
+    await ensureActiveSubscription(user.id);
+  } catch (syncError) {
+    console.error("[payment-method] subscription sync failed", syncError);
+    return NextResponse.json({ error: "Unable to sync subscription" }, { status: 500 });
   }
 
   let subscription: SubscriptionRow | null = null;

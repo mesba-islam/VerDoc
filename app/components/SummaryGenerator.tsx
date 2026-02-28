@@ -3,21 +3,38 @@ import { motion, AnimatePresence } from 'framer-motion';
 import SummaryConfigurator from './SummaryConfigurator';
 import type { SummaryConfig } from '@/app/types';
 // import { createSupabaseBrowser } from '@/lib/supabase/client';
-import { generateTitleFromSummary } from '@/app/lib/summaryUtils';
+import { generateTitleFromSummaryByTemplate } from '@/app/lib/summaryUtils';
+
+type TranscriptSegment = {
+  text: string;
+  start: number;
+  end: number;
+};
+
 interface SummaryGeneratorProps {
   transcript: string;
+  segments?: TranscriptSegment[];
   summary: string;
   onSummaryGenerated?: () => void;
+  onTemplateUsed?: (template: string) => void;
   setSummary: (summary: string) => void;
   onCustomOpenChange?: (open: boolean) => void;
+  canUsePremiumTemplates?: boolean;
+  allowCustom?: boolean;
+  activeTemplate?: string | null;
 }
 
 const SummaryGenerator = ({
   transcript,
+  segments = [],
   summary,
   onSummaryGenerated,
+  onTemplateUsed,
   setSummary,
   onCustomOpenChange,
+  canUsePremiumTemplates = true,
+  allowCustom = true,
+  activeTemplate,
 }: SummaryGeneratorProps) => {
 
   const [isGenerating, setIsGenerating] = useState(false);
@@ -38,6 +55,7 @@ const SummaryGenerator = ({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           text: transcript,
+          segments,
           config
         }),
       });
@@ -58,6 +76,7 @@ const SummaryGenerator = ({
 
       const { summary } = await response.json();
       setSummary(summary);
+      onTemplateUsed?.(config.template);
 
       onSummaryGenerated?.();
     }
@@ -97,6 +116,8 @@ const SummaryGenerator = ({
               onGenerate={handleGenerate}
               isGenerating={isGenerating}
               onCustomOpenChange={onCustomOpenChange}
+              canUsePremiumTemplates={canUsePremiumTemplates}
+              allowCustom={allowCustom}
             />
           </motion.div>
         )}
@@ -158,7 +179,10 @@ const SummaryGenerator = ({
             </div>
             <div className="relative px-6 py-6 text-slate-800 dark:text-slate-100">
               <div className="space-y-4 leading-7 text-sm md:text-base">
-                {renderStructuredSummary(generateTitleFromSummary(summary).content)}
+                {renderStructuredSummary(
+                  generateTitleFromSummaryByTemplate(summary, activeTemplate).content,
+                  activeTemplate,
+                )}
               </div>
             </div>
           </motion.div>
@@ -169,22 +193,39 @@ const SummaryGenerator = ({
 };
 
 type SummaryBlock =
+  | { type: 'heading'; text: string }
   | { type: 'list'; items: string[] }
   | { type: 'paragraph'; text: string }
   | { type: 'title'; text: string };
 
-function renderStructuredSummary(raw: string) {
-  const lines = raw.split('\n').map((l) => l.trim()).filter(Boolean);
+function renderStructuredSummary(raw: string, templateKey?: string | null) {
+  const isEvidenceTemplate = templateKey === 'evidence-leveraging-intelligence';
+  const lines = raw
+    .split('\n')
+    .map((l) => l.trim())
+    .filter(Boolean)
+    .filter((l) => l !== '```');
   const blocks: SummaryBlock[] = [];
 
   lines.forEach((line, idx) => {
-    const isDateLine = idx === 0 && /[A-Za-z]+ \d{1,2}, \d{4}/.test(line);
+    const normalized = line
+      .replace(/^#{1,6}\s+/, '')
+      .replace(/^\*{3}(.+?)\*{3}$/, '$1')
+      .replace(/^\*{2}(.+?)\*{2}$/, '$1')
+      .replace(/\*{2,}/g, '')
+      .trim();
+
+    const isDateLine = idx === 0 && /[A-Za-z]+ \d{1,2}, \d{4}/.test(normalized);
+    if (!normalized) return;
+
     if (isDateLine) {
-      blocks.push({ type: 'title', text: line });
+      blocks.push({ type: 'title', text: normalized });
       return;
     }
-    if (line.startsWith('- ')) {
-      const text = line.slice(2).trim();
+
+    const isListItem = /^([-*]\s+|\d+\.\s+)/.test(normalized);
+    if (isListItem) {
+      const text = normalized.replace(/^([-*]\s+|\d+\.\s+)/, '').trim();
       const last = blocks[blocks.length - 1];
       if (last && last.type === 'list') {
         last.items.push(text);
@@ -193,11 +234,23 @@ function renderStructuredSummary(raw: string) {
       }
       return;
     }
-    blocks.push({ type: 'paragraph', text: line });
+
+    const isHeading = !isEvidenceTemplate && (
+      /:$/.test(normalized) ||
+      /^(TL;DR Summary|Strategic Signal|Decision Confidence|Advisory Insight|Impacted Metrics \/ KPIs|Task Tracker|Execution Watchlist|Executive TL;DR|Decisions Made|Key Risks & Mitigations|Metrics Mentioned|Asks \/ Requests|Next Review Checkpoints|Areas of Strong Alignment|Repeated Objections|Unresolved Disagreements|Topics Deferred Without Resolution|Risk of Misalignment)$/i.test(
+        normalized,
+      )
+    );
+    if (isHeading) {
+      blocks.push({ type: 'heading', text: normalized.replace(/:$/, '') });
+      return;
+    }
+
+    blocks.push({ type: 'paragraph', text: normalized });
   });
 
   const formatBold = (text: string) =>
-    text.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+    text.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>').replace(/\*{2,}/g, '');
 
   return blocks.map((block, i) => {
     if (block.type === 'title') {
@@ -234,12 +287,24 @@ function renderStructuredSummary(raw: string) {
       );
     }
 
+    if (block.type === 'heading') {
+      return (
+        <motion.h5
+          key={`h-${i}`}
+          initial={{ opacity: 0, y: 6 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="text-slate-900 dark:text-slate-100 text-base font-bold"
+          dangerouslySetInnerHTML={{ __html: formatBold(block.text) }}
+        />
+      );
+    }
+
     return (
       <motion.p
         key={`p-${i}`}
         initial={{ opacity: 0, y: 6 }}
         animate={{ opacity: 1, y: 0 }}
-        className="text-slate-800 dark:text-slate-200 font-semibold"
+        className={`text-slate-800 dark:text-slate-200 ${isEvidenceTemplate ? 'font-semibold' : 'font-normal'}`}
         dangerouslySetInnerHTML={{ __html: formatBold(block.text) }}
       />
     );

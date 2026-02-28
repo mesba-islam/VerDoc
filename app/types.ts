@@ -21,6 +21,9 @@ export type SummaryConfig = {
     billing_interval: 'month' | 'year' | null;
     price: number;
     video_to_audio_unlimited: boolean;
+    doc_export_limit?: number | null;
+    premium_templates?: boolean | null;
+    archive_access?: boolean | null;
   };
 
   declare module '@paddle/paddle-js' {

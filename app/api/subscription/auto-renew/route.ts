@@ -1,6 +1,7 @@
-﻿import { NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { createSupabaseServer } from "@/lib/supabase/server";
 import supabaseAdmin from "@/lib/supabase/admin";
+import { ensureActiveSubscription } from "@/app/lib/subscriptionHelpers";
 
 const PADDLE_API_URL =
   process.env.NEXT_PUBLIC_PADDLE_ENV === "sandbox"
@@ -41,11 +42,19 @@ async function getSessionAndSubscription() {
     return { errorResponse: NextResponse.json({ error: "Unauthorized" }, { status: 401 }) };
   }
 
+  try {
+    await ensureActiveSubscription(user.id);
+  } catch (syncError) {
+    console.error("[auto-renew] subscription sync error", syncError);
+    return { errorResponse: NextResponse.json({ error: "Unable to sync subscription" }, { status: 500 }) };
+  }
+
   const { data, error: subError } = await supabaseAdmin
     .from("subscriptions")
     .select("id, auto_renew, status, ends_at, cancel_at, paddle_subscription_id")
     .eq("user_id", user.id)
     .eq("status", "active")
+    .not("paddle_subscription_id", "is", null)
     .order("cancel_at", { ascending: true, nullsFirst: true })
     .order("ends_at", { ascending: false, nullsFirst: false })
     .order("updated_at", { ascending: false, nullsFirst: false })
@@ -148,26 +157,14 @@ export async function PATCH(req: Request) {
     let paddlePayload: PaddleResponse = null;
 
     if (desired) {
-      if (subscription.status === "paused") {
-        // Resume a paused subscription
-        paddlePayload = await callPaddle(
-          `/subscriptions/${subscription.paddle_subscription_id}/resume`,
-          { method: "POST" },
-        );
-      } else {
-        // Re-enable auto-renew by removing the scheduled cancellation
-        // Use the update subscription endpoint to unschedule the cancellation
-        const base = subscription.paddle_subscription_id;
-        paddlePayload = await callPaddle(
-          `/subscriptions/${base}`,
-          {
-            method: "PATCH",
-            body: JSON.stringify({ scheduled_change: null }),
-          },
-        );
-      }
+      paddlePayload = await callPaddle(
+        `/subscriptions/${subscription.paddle_subscription_id}`,
+        {
+          method: "PATCH",
+          body: JSON.stringify({ scheduled_change: null }),
+        },
+      );
     } else {
-      // Turn auto-renew off at the next billing period
       paddlePayload = await callPaddle(
         `/subscriptions/${subscription.paddle_subscription_id}/cancel`,
         {

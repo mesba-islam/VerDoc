@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createServerClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';
+import { ensureActiveSubscription } from '@/app/lib/subscriptionHelpers';
 
 export async function GET() {
   try {
@@ -29,6 +30,12 @@ export async function GET() {
 
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+    const { plan } = await ensureActiveSubscription(user.id);
+    const archiveAllowed = plan?.archive_access ?? false;
+    if (!archiveAllowed) {
+      return NextResponse.json({ error: "Archive access requires a paid plan" }, { status: 403 });
+    }
 
     const { data, error } = await supabase
       .from('summaries')

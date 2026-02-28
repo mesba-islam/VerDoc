@@ -8,7 +8,7 @@ export async function POST(request: Request) {
 	// rate limit
 
 	const data = await request.json();
-	const supabase = supabaseAdmin();
+	const supabase = supabaseAdmin;
 
 	const res = await supabase.auth.admin.generateLink({
 		type: "signup",

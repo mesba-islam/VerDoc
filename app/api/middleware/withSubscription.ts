@@ -1,6 +1,7 @@
 // app/api/middleware/withSubscription.ts
 import { NextResponse } from 'next/server';
 import { createSupabaseServer } from '@/lib/supabase/server';
+import { ensureActiveSubscription } from '@/app/lib/subscriptionHelpers';
 
 export async function withSubscription(
   req: Request,
@@ -12,6 +13,9 @@ export async function withSubscription(
       transcription_mins: number;
       summarization_limit: number | null;
       billing_interval: string | null;
+      doc_export_limit?: number | null;
+      premium_templates?: boolean | null;
+      archive_access?: boolean | null;
     };
   }) => Promise<Response>
 ) {
@@ -26,28 +30,12 @@ export async function withSubscription(
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  const { data: subscription, error: subscriptionError } = await supabase
-    .from('subscriptions')
-    // .select('*, subscription_plans(*)')
-    .select(`
-      *,
-      subscription_plans!plan_id(*)
-    `)
-    .eq('user_id', user.id)
-    .eq('status', 'active')
-    .lte('starts_at', new Date().toISOString())
-    .gte('ends_at', new Date().toISOString())
-    .single();
-    // console.log('DEBUG: subscription:', subscription);
+  const { subscription, plan } = await ensureActiveSubscription(user.id);
 
-    
-
-  if (subscriptionError || !subscription || !subscription.subscription_plans) {
-    console.error('No active subscription:', subscriptionError);
+  if (!subscription || !plan) {
+    console.error('No active subscription');
     return NextResponse.json({ error: 'No active subscription' }, { status: 403 });
   }
-
-  const plan = subscription.subscription_plans;
 
   return callback({
     userId: user.id,
@@ -57,6 +45,9 @@ export async function withSubscription(
       transcription_mins: plan.transcription_mins,
       summarization_limit: plan.summarization_limit,
       billing_interval: plan.billing_interval,
+      doc_export_limit: plan.doc_export_limit,
+      premium_templates: plan.premium_templates,
+      archive_access: plan.archive_access,
     },
   });
 }

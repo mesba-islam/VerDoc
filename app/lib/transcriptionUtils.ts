@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { ensureActiveSubscription, type PlanRow, type SubscriptionRow } from "@/app/lib/subscriptionHelpers";
 
 function assertIsSupabaseClient(x: unknown): asserts x is SupabaseClient {
   const ok = !!x && typeof (x as SupabaseClient).auth?.getUser === "function";
@@ -16,21 +17,6 @@ type LimitResult = {
   periodEnd?: string;
 };
 
-type SubscriptionRow = {
-  id: string;
-  user_id: string;
-  plan_id: string;
-  status: string;
-  starts_at: string;
-  ends_at: string | null;
-};
-
-type PlanRow = {
-  id: string;
-  transcription_mins: number | string;
-  billing_interval: string | null;
-};
-
 export async function checkTranscriptionLimit(
   supabase: SupabaseClient,
   userId: string
@@ -38,20 +24,10 @@ export async function checkTranscriptionLimit(
   assertIsSupabaseClient(supabase);
   const nowISO = new Date().toISOString();
 
-  // 1) Get active/trialing subscription whose window includes now
-  const { data: sub, error: subErr } = await supabase
-    .from("subscriptions")
-    .select("id,user_id,plan_id,status,starts_at,ends_at")
-    .eq("user_id", userId)
-    .in("status", ["active"])          // include trials if used
-    .lte("starts_at", nowISO)
-    .or(`ends_at.is.null,ends_at.gte.${nowISO}`)   // ends_at NULL or >= now
-    .order("starts_at", { ascending: false })
-    .maybeSingle<SubscriptionRow>();
+  // 1) Ensure an active subscription (auto-provision Free if missing)
+  const { subscription: sub, plan } = await ensureActiveSubscription(userId);
 
-  if (subErr) throw subErr;
-
-  if (!sub) {
+  if (!sub || !plan) {
     return {
       canTranscribe: false,
       message: "Subscribe to transcribe",
@@ -59,28 +35,6 @@ export async function checkTranscriptionLimit(
       planLimit: 0,
       usedMinutes: 0,
       billingInterval: null,
-    };
-  }
-
-  // 2) Fetch plan separately (avoid join headaches)
-  const { data: plan, error: planErr } = await supabase
-    .from("subscription_plans")
-    .select("id,transcription_mins,billing_interval")
-    .eq("id", sub.plan_id)
-    .maybeSingle<PlanRow>();
-
-  if (planErr) throw planErr;
-
-  if (!plan) {
-    return {
-      canTranscribe: false,
-      message: "Your subscription is missing a plan. Please contact support.",
-      remainingMinutes: 0,
-      planLimit: 0,
-      usedMinutes: 0,
-      billingInterval: null,
-      periodStart: sub.starts_at,
-      periodEnd: sub.ends_at ?? undefined,
     };
   }
 

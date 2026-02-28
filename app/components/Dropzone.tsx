@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useCallback, useEffect } from "react";
-import { AudioWaveform, Crown, CheckCircle, XCircle, Timer, Activity } from "lucide-react";
+import { AudioWaveform, Crown, CheckCircle, XCircle, Timer, Activity, AlertCircle } from "lucide-react";
 import { useDropzone } from "react-dropzone";
 import { useFileStore } from "../store";
 import { useRouter } from "next/navigation";
@@ -12,6 +12,9 @@ type PlanDetails = {
   transcription_mins: number;
   summarization_limit: number | null;
   billing_interval: string | null;
+  doc_export_limit: number | null;
+  premium_templates?: boolean | null;
+  archive_access?: boolean | null;
 };
 
 // NEW: mirrors the Transcribe page type
@@ -27,9 +30,12 @@ export default function Dropzone() {
   const [uploading, setUploading] = useState(false);
   const [planDetails, setPlanDetails] = useState<PlanDetails | null>(null);
   const [isLoadingPlan, setIsLoadingPlan] = useState(true);
+  const [uploadError, setUploadError] = useState<string | null>(null);
 
   // NEW: remaining minutes from /api/transcription/limits
   const [remainingMinutes, setRemainingMinutes] = useState<number | null>(null);
+  const [remainingExports, setRemainingExports] = useState<number | null>(null);
+  const [exportsUnlimited, setExportsUnlimited] = useState(false);
 
   const setFile = useFileStore((state) => state.setFile);
   const router = useRouter();
@@ -39,9 +45,10 @@ export default function Dropzone() {
       try {
         setIsLoadingPlan(true);
 
-        const [planRes, limitsRes] = await Promise.all([
+        const [planRes, limitsRes, exportRes] = await Promise.all([
           fetch("/api/user/plan", { credentials: "include" }),
           fetch("/api/transcription/limits", { credentials: "include" }),
+          fetch("/api/exports/limits", { credentials: "include" }),
         ]);
 
         // Plan details
@@ -54,25 +61,33 @@ export default function Dropzone() {
             setUploadLimit(plan.upload_limit_mb);
           } else {
             // No active subscription -> fallback Free Plan
-            setPlanDetails({
-              name: "Free Plan",
-              upload_limit_mb: 50,
-              transcription_mins: 0,
+            const fallback = {
+              name: "Free",
+              upload_limit_mb: 200,
+              transcription_mins: 120,
               summarization_limit: 0,
               billing_interval: null,
-            });
-            setUploadLimit(50);
+              doc_export_limit: 3,
+              premium_templates: false,
+              archive_access: false,
+            };
+            setPlanDetails(fallback);
+            setUploadLimit(fallback.upload_limit_mb);
           }
         } else if (planRes.status === 403) {
           // No active subscription
-          setPlanDetails({
-            name: "Free Plan",
-            upload_limit_mb: 50,
-            transcription_mins: 0,
+          const fallback = {
+            name: "Free",
+            upload_limit_mb: 200,
+            transcription_mins: 120,
             summarization_limit: 0,
             billing_interval: null,
-          });
-          setUploadLimit(50);
+            doc_export_limit: 3,
+            premium_templates: false,
+            archive_access: false,
+          };
+          setPlanDetails(fallback);
+          setUploadLimit(fallback.upload_limit_mb);
         } else {
           setPlanDetails(null);
           setUploadLimit(null);
@@ -88,11 +103,24 @@ export default function Dropzone() {
         } else {
           setRemainingMinutes(null); // unknown
         }
+
+        // Export limits
+        if (exportRes.ok) {
+          const el = await exportRes.json();
+          setExportsUnlimited(el.planLimit === null);
+          setRemainingExports(el.remainingExports);
+        } else if (exportRes.status === 401 || exportRes.status === 403) {
+          setExportsUnlimited(false);
+          setRemainingExports(0);
+        } else {
+          setRemainingExports(null);
+        }
       } catch (err) {
         console.error("Failed to fetch plan/limits:", err);
         setPlanDetails(null);
         setUploadLimit(null);
         setRemainingMinutes(null);
+        setRemainingExports(null);
       } finally {
         setIsLoadingPlan(false);
       }
@@ -107,12 +135,15 @@ export default function Dropzone() {
 
       const file = acceptedFiles[0];
       const fileSizeMB = file.size / (1024 * 1024);
+      const readableLimit = uploadLimit >= 1024 ? `${(uploadLimit / 1024).toFixed(1)} GB` : `${uploadLimit} MB`;
+      const readableSize = fileSizeMB >= 1024 ? `${(fileSizeMB / 1024).toFixed(1)} GB` : `${fileSizeMB.toFixed(1)} MB`;
 
       if (fileSizeMB > uploadLimit) {
-        alert(`File size exceeds your plan's upload limit of ${uploadLimit}MB.`);
+        setUploadError(`File is ${readableSize}, but your plan allows up to ${readableLimit}.`);
         return;
       }
 
+      setUploadError(null);
       setFile(file);
       simulateUpload(() => router.push("/transcribe"));
     },
@@ -194,13 +225,37 @@ export default function Dropzone() {
             <div className="flex items-center justify-between rounded-lg bg-white/5 px-3 py-2 dark:bg-white/5">
               <div className="flex items-center gap-2 text-slate-600 dark:text-gray-400">
                 <Activity className="w-4 h-4 text-emerald-400" />
-                <span>Remaining times</span>
+                <span>Remaining minutes</span>
               </div>
               <span className="font-semibold text-emerald-200">
                 {remainingMinutes.toFixed(1)} mins
               </span>
             </div>
           )}
+
+          {planDetails.doc_export_limit !== null && (
+            <div className="flex items-center justify-between rounded-lg bg-white/5 px-3 py-2 dark:bg-white/5">
+              <div className="flex items-center gap-2 text-slate-600 dark:text-gray-400">
+                <Activity className="w-4 h-4 text-cyan-500" />
+                <span>Exports per period</span>
+              </div>
+              <span className="font-semibold text-cyan-200">
+                {planDetails.doc_export_limit}
+              </span>
+            </div>
+          )}
+
+          {exportsUnlimited || (remainingExports != null && remainingExports >= 0) ? (
+            <div className="flex items-center justify-between rounded-lg bg-white/5 px-3 py-2 dark:bg-white/5">
+              <div className="flex items-center gap-2 text-slate-600 dark:text-gray-400">
+                <Activity className="w-4 h-4 text-blue-400" />
+                <span>Remaining exports</span>
+              </div>
+              <span className="font-semibold text-blue-200">
+                {exportsUnlimited ? "Unlimited" : remainingExports?.toFixed(0)}
+              </span>
+            </div>
+          ) : null}
         </div>
 
         {planDetails.name === "Free Plan" && (
@@ -227,7 +282,11 @@ export default function Dropzone() {
         <AudioWaveform className="w-16 h-16 text-cyan-500 dark:text-gray-200" strokeWidth={1.5} />
         <p className="text-lg font-medium text-slate-700 dark:text-gray-100">
           {uploadLimit !== null
-            ? `Max file size: ${uploadLimit}MB`
+            ? `Max file size: ${
+                uploadLimit >= 1024
+                  ? `${(uploadLimit / 1024).toFixed(1)} GB`
+                  : `${uploadLimit} MB`
+              }`
             : "Loading your plan..."}
         </p>
         <p className="text-sm text-slate-500 dark:text-gray-400">
@@ -242,6 +301,18 @@ export default function Dropzone() {
           </div>
         )}
       </div>
+
+      {uploadError && (
+        <div className="w-96 mx-auto rounded-xl border border-red-200/60 bg-red-50/80 px-4 py-3 text-left text-red-800 dark:border-red-900/50 dark:bg-red-900/20 dark:text-red-200 shadow-sm">
+          <div className="flex items-start gap-2">
+            <AlertCircle className="w-5 h-5 mt-[2px]" />
+            <div>
+              <p className="text-sm font-semibold">Upload blocked</p>
+              <p className="text-sm leading-5">{uploadError}</p>
+            </div>
+          </div>
+        </div>
+      )}
 
       <p className="mt-1 text-sm text-gray-500 dark:text-gray-400 text-center flex items-center justify-center gap-2">
         <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16"
